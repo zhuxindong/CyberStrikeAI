@@ -289,6 +289,109 @@ public class AgentService {
         messageRepository.save(msg);
     }
 
+    // 同步执行任务（用于内部调用，如 BatchTask）
+    public String executeTaskSync(String conversationId, String messageText) {
+        String taskId = UUID.randomUUID().toString();
+        TaskInfo task = new TaskInfo();
+        task.id = taskId;
+        task.conversationId = conversationId;
+        task.status = "running";
+        task.message = messageText.length() > 50 ? messageText.substring(0, 50) + "..." : messageText;
+        task.startedAt = LocalDateTime.now();
+        runningTasks.put(taskId, task);
+
+        try {
+            // Save User Message
+            saveMessage(conversationId, "user", messageText);
+
+            // Prepare Messages
+            List<ChatCompletionMessage> messages = new ArrayList<>();
+            messages.add(ChatCompletionMessage.builder().role("system").content(SYSTEM_PROMPT).build());
+            messages.add(ChatCompletionMessage.builder().role("user").content(messageText).build());
+
+            // Prepare Tools
+            List<com.cyberstrike.service.openai.model.OpenAIModels.Tool> tools = new ArrayList<>();
+            for (ToolRegistry.ToolDefinition def : toolRegistry.getTools()) {
+                var function = new com.cyberstrike.service.openai.model.OpenAIModels.Function(
+                        def.name(), def.description(), def.parameters());
+                tools.add(new com.cyberstrike.service.openai.model.OpenAIModels.Tool("function", function));
+            }
+
+            int maxIterations = 10;
+            String finalResponse = "";
+
+            for (int i = 0; i < maxIterations; i++) {
+                if (task.cancelled) {
+                    task.status = "cancelled";
+                    task.completedAt = LocalDateTime.now();
+                    moveToCompleted(taskId, task);
+                    return "Task Cancelled";
+                }
+
+                ChatCompletionRequest aiRequest = ChatCompletionRequest.builder()
+                        .model(modelName)
+                        .messages(messages)
+                        .tools(tools.isEmpty() ? null : tools)
+                        .build();
+
+                ChatCompletionResponse response = openAiService.chatCompletion(aiRequest);
+
+                if (response == null || response.getChoices() == null || response.getChoices().isEmpty()) {
+                    throw new RuntimeException("OpenAI returned no response");
+                }
+
+                ChatCompletionChoice choice = response.getChoices().get(0);
+                ChatCompletionMessage message = choice.getMessage();
+                messages.add(message);
+
+                if ("tool_calls".equals(choice.getFinishReason()) && message.getToolCalls() != null) {
+                    for (ToolCall toolCall : message.getToolCalls()) {
+                        if (task.cancelled) {
+                            task.status = "cancelled";
+                            task.completedAt = LocalDateTime.now();
+                            moveToCompleted(taskId, task);
+                            return "Task Cancelled";
+                        }
+
+                        String functionName = toolCall.getFunction().getName();
+                        String arguments = toolCall.getFunction().getArguments();
+                        String callId = toolCall.getId();
+
+                        // Execute Tool
+                        String result = toolRegistry.execute(functionName, arguments);
+
+                        // Add Tool Message
+                        messages.add(ChatCompletionMessage.builder()
+                                .role("tool")
+                                .toolCallId(callId)
+                                .name(functionName)
+                                .content(result)
+                                .build());
+                    }
+                } else {
+                    finalResponse = message.getContent();
+                    break;
+                }
+            }
+
+            // Save Assistant Message
+            saveMessage(conversationId, "assistant", finalResponse);
+
+            task.status = "completed";
+            task.completedAt = LocalDateTime.now();
+            moveToCompleted(taskId, task);
+
+            return finalResponse;
+
+        } catch (Exception e) {
+            log.error("Error in sync agent task", e);
+            task.status = "error";
+            task.completedAt = LocalDateTime.now();
+            moveToCompleted(taskId, task);
+            throw new RuntimeException(e);
+        }
+    }
+
     private void sendSseEvent(SseEmitter emitter, String type, String message, String dataJson) throws IOException {
         String data = dataJson != null ? dataJson : "{}";
         String eventJson = String.format("{\"type\": \"%s\", \"message\": \"%s\", \"data\": %s}",

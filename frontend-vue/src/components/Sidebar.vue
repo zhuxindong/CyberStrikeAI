@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { Plus, ChatDotRound, Delete, Star, StarFilled } from '@element-plus/icons-vue';
+import { Plus, ChatDotRound, Delete, Star, StarFilled, Search } from '@element-plus/icons-vue';
 
 interface Conversation {
   id: string;
@@ -20,6 +20,7 @@ const emit = defineEmits<{
 
 const conversations = ref<Conversation[]>([]);
 const loading = ref(false);
+const searchQuery = ref('');
 
 const fetchConversations = async () => {
   loading.value = true;
@@ -93,6 +94,11 @@ const formatTime = (dateStr: string) => {
   return date.toLocaleDateString();
 };
 
+const filteredConversations = () => {
+  if (!searchQuery.value) return conversations.value;
+  return conversations.value.filter(c => c.title.toLowerCase().includes(searchQuery.value.toLowerCase()));
+};
+
 onMounted(() => {
   fetchConversations();
 });
@@ -101,68 +107,80 @@ onMounted(() => {
 <template>
   <div class="sidebar">
     <div class="sidebar-header">
-      <h3>对话列表</h3>
-      <el-button type="primary" :icon="Plus" circle size="small" @click="createConversation" />
+      <button class="new-chat-btn" @click="createConversation">
+        <el-icon><Plus /></el-icon> 新对话
+      </button>
     </div>
     
-    <el-scrollbar class="conversation-list">
-      <div v-if="loading" class="loading-state">
-        <el-icon class="is-loading"><Loading /></el-icon>
+    <div class="sidebar-content">
+      <div class="conversation-search-box">
+        <el-input 
+          v-model="searchQuery" 
+          placeholder="搜索历史记录..." 
+          :prefix-icon="Search"
+          class="search-input"
+        />
       </div>
-      
-      <div v-else-if="conversations.length === 0" class="empty-state">
-        <p>暂无对话</p>
-        <el-button type="primary" size="small" @click="createConversation">创建对话</el-button>
-      </div>
-      
-      <div v-else>
-        <!-- 置顶对话 -->
-        <template v-for="conv in conversations.filter(c => c.pinned)" :key="conv.id">
-          <div 
-            class="conversation-item pinned" 
-            :class="{ active: conv.id === currentId }"
-            @click="emit('select', conv.id)"
-          >
-            <el-icon class="pin-icon"><StarFilled /></el-icon>
-            <div class="conv-content">
-              <div class="conv-title">{{ conv.title }}</div>
-              <div class="conv-time">{{ formatTime(conv.updatedAt) }}</div>
-            </div>
-            <div class="conv-actions">
-              <el-icon @click="togglePin(conv, $event)"><StarFilled /></el-icon>
-              <el-icon @click="deleteConversation(conv.id, $event)"><Delete /></el-icon>
-            </div>
-          </div>
-        </template>
+
+      <el-scrollbar class="conversation-list">
+        <div v-if="loading" class="loading-state">
+          <el-icon class="is-loading"><Loading /></el-icon>
+        </div>
         
-        <!-- 普通对话 -->
-        <template v-for="conv in conversations.filter(c => !c.pinned)" :key="conv.id">
-          <div 
-            class="conversation-item" 
-            :class="{ active: conv.id === currentId }"
-            @click="emit('select', conv.id)"
-          >
-            <el-icon class="conv-icon"><ChatDotRound /></el-icon>
-            <div class="conv-content">
-              <div class="conv-title">{{ conv.title }}</div>
-              <div class="conv-time">{{ formatTime(conv.updatedAt) }}</div>
+        <div v-else-if="conversations.length === 0" class="empty-state">
+          <p>暂无对话</p>
+        </div>
+        
+        <div v-else>
+          <!-- 置顶对话 -->
+          <div class="section-title" v-if="filteredConversations().some(c => c.pinned)">置顶对话</div>
+          <template v-for="conv in filteredConversations().filter(c => c.pinned)" :key="conv.id">
+            <div 
+              class="conversation-item pinned" 
+              :class="{ active: conv.id === currentId }"
+              @click="emit('select', conv.id)"
+            >
+              <el-icon class="pin-icon"><StarFilled /></el-icon>
+              <div class="conv-content">
+                <div class="conv-title">{{ conv.title }}</div>
+                <div class="conv-time">{{ formatTime(conv.updatedAt) }}</div>
+              </div>
+              <div class="conv-actions">
+                <el-icon @click="togglePin(conv, $event)"><StarFilled /></el-icon>
+                <el-icon @click="deleteConversation(conv.id, $event)"><Delete /></el-icon>
+              </div>
             </div>
-            <div class="conv-actions">
-              <el-icon @click="togglePin(conv, $event)"><Star /></el-icon>
-              <el-icon @click="deleteConversation(conv.id, $event)"><Delete /></el-icon>
+          </template>
+          
+          <div class="section-title">最近对话</div>
+          <template v-for="conv in filteredConversations().filter(c => !c.pinned)" :key="conv.id">
+            <div 
+              class="conversation-item" 
+              :class="{ active: conv.id === currentId }"
+              @click="emit('select', conv.id)"
+            >
+              <el-icon class="conv-icon"><ChatDotRound /></el-icon>
+              <div class="conv-content">
+                <div class="conv-title">{{ conv.title }}</div>
+                <div class="conv-time">{{ formatTime(conv.updatedAt) }}</div>
+              </div>
+              <div class="conv-actions">
+                <el-icon @click="togglePin(conv, $event)"><Star /></el-icon>
+                <el-icon @click="deleteConversation(conv.id, $event)"><Delete /></el-icon>
+              </div>
             </div>
-          </div>
-        </template>
-      </div>
-    </el-scrollbar>
+          </template>
+        </div>
+      </el-scrollbar>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .sidebar {
-  width: 280px;
+  width: 100%;
   height: 100%;
-  background-color: var(--el-bg-color);
+  background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
   border-right: 1px solid var(--el-border-color-light);
   display: flex;
   flex-direction: column;
@@ -170,25 +188,60 @@ onMounted(() => {
 
 .sidebar-header {
   padding: 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  flex-shrink: 0;
 }
 
-.sidebar-header h3 {
-  margin: 0;
-  font-size: 16px;
+.new-chat-btn {
+  width: 100%;
+  padding: 10px 16px;
+  background-color: var(--el-color-primary); /* Use primary color */
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.new-chat-btn:hover {
+  background-color: var(--el-color-primary-light-3);
+  transform: translateY(-1px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.sidebar-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 16px 16px 16px;
+}
+
+.conversation-search-box {
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-size: 12px;
   font-weight: 600;
+  color: var(--el-text-color-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 12px 0 8px 0;
+  padding: 0 4px;
 }
 
 .conversation-list {
   flex: 1;
-  overflow-y: auto;
 }
 
 .loading-state, .empty-state {
-  padding: 40px 20px;
+  padding: 20px 0;
   text-align: center;
   color: var(--el-text-color-secondary);
 }
@@ -196,10 +249,11 @@ onMounted(() => {
 .conversation-item {
   display: flex;
   align-items: center;
-  padding: 12px 16px;
+  padding: 10px 12px;
   cursor: pointer;
-  transition: background-color 0.2s;
-  border-bottom: 1px solid var(--el-border-color-extra-light);
+  transition: all 0.2s;
+  border-radius: 6px;
+  margin-bottom: 2px;
 }
 
 .conversation-item:hover {
@@ -208,17 +262,21 @@ onMounted(() => {
 
 .conversation-item.active {
   background-color: var(--el-color-primary-light-9);
-  border-left: 3px solid var(--el-color-primary);
+  color: var(--el-color-primary);
 }
 
-.conversation-item.pinned {
-  background-color: var(--el-color-warning-light-9);
+.conversation-item.active .conv-title {
+  font-weight: 500;
 }
 
 .conv-icon, .pin-icon {
   margin-right: 10px;
-  font-size: 18px;
+  font-size: 16px;
   color: var(--el-text-color-secondary);
+}
+
+.conversation-item.active .conv-icon {
+    color: var(--el-color-primary);
 }
 
 .pin-icon {
@@ -235,17 +293,22 @@ onMounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--el-text-color-primary);
+}
+
+.conversation-item.active .conv-title {
+    color: var(--el-color-primary);
 }
 
 .conv-time {
   font-size: 12px;
   color: var(--el-text-color-secondary);
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .conv-actions {
   display: none;
-  gap: 8px;
+  gap: 6px;
 }
 
 .conversation-item:hover .conv-actions {
@@ -255,9 +318,13 @@ onMounted(() => {
 .conv-actions .el-icon {
   cursor: pointer;
   color: var(--el-text-color-secondary);
+  font-size: 14px;
+  padding: 2px;
 }
 
 .conv-actions .el-icon:hover {
   color: var(--el-color-primary);
+  background: rgba(0,0,0,0.05);
+  border-radius: 4px;
 }
 </style>

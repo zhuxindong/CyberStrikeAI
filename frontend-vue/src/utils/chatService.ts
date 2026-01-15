@@ -7,7 +7,8 @@ export interface StreamCallbacks {
 export async function streamChat(
     message: string,
     callbacks: StreamCallbacks,
-    conversationId?: string
+    conversationId?: string,
+    role?: string
 ) {
     try {
         const response = await fetch("/api/agent-loop/stream", {
@@ -18,6 +19,7 @@ export async function streamChat(
             body: JSON.stringify({
                 message,
                 conversationId,
+                role
             }),
         });
 
