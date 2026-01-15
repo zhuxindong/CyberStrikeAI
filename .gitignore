@@ -1,0 +1,53 @@
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+*.code-workspace
+
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+backend-java/target/
+backend-java/*.log
+backend-java/help.md
+
+# Node / Vue
+node_modules/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+frontend-vue/node_modules/
+frontend-vue/dist/
+frontend-vue/*.log
+
+# Logs
+*.log
+logs/
+
+# Database
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Temporary
+tmp/
+temp/
