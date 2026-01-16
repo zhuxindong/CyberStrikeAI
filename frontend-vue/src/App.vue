@@ -6,6 +6,10 @@ import ToolsPanel from './components/ToolsPanel.vue';
 import ConfigView from './components/ConfigView.vue';
 import RolesView from './components/RolesView.vue';
 import BatchQueueView from './components/BatchQueueView.vue';
+import KnowledgeView from './components/KnowledgeView.vue';
+import VulnsView from './components/VulnsView.vue';
+import MonitorView from './components/MonitorView.vue';
+import McpView from './components/McpView.vue';
 import { 
   Setting, 
   Tools, 
@@ -13,12 +17,14 @@ import {
   User, 
   VideoPlay, 
   ChatDotRound, 
-  Warning 
+  Warning,
+  Collection,
+  Connection 
 } from '@element-plus/icons-vue';
 
 const currentConversationId = ref<string | undefined>();
 const showToolsPanel = ref(false);
-const currentView = ref<'chat' | 'config' | 'monitor' | 'roles' | 'batch' | 'vulns'>('chat');
+const currentView = ref<'chat' | 'config' | 'monitor' | 'roles' | 'batch' | 'vulns' | 'knowledge' | 'mcp'>('chat');
 
 const handleSelectConversation = (id: string) => {
   currentConversationId.value = id;
@@ -72,6 +78,16 @@ const handleViewConv = (id: string) => {
 
         <div 
           class="nav-item" 
+          :class="{ active: currentView === 'knowledge' }"
+          @click="currentView = 'knowledge'"
+          title="知识库"
+        >
+          <el-icon><Collection /></el-icon>
+          <span class="nav-label">知识</span>
+        </div>
+
+        <div 
+          class="nav-item" 
           :class="{ active: currentView === 'roles' }"
           @click="currentView = 'roles'"
           title="角色管理"
@@ -104,6 +120,16 @@ const handleViewConv = (id: string) => {
 
         <div 
           class="nav-item" 
+          :class="{ active: currentView === 'mcp' }"
+          @click="currentView = 'mcp'"
+          title="MCP 管理"
+        >
+          <el-icon><Connection /></el-icon>
+          <span class="nav-label">MCP</span>
+        </div>
+
+        <div 
+          class="nav-item" 
           :class="{ active: currentView === 'config' }"
           @click="currentView = 'config'"
           title="设置"
@@ -131,6 +157,7 @@ const handleViewConv = (id: string) => {
           <h2>{{ 
             currentView === 'chat' ? 'CyberStrikeAI' : 
             currentView === 'batch' ? '批量任务管理' :
+            currentView === 'knowledge' ? '知识库管理' :
             currentView === 'roles' ? '角色管理' :
             currentView === 'config' ? '系统设置' :
             currentView === 'vulns' ? '漏洞管理' : '监控'
@@ -169,16 +196,28 @@ const handleViewConv = (id: string) => {
             </div>
           </template>
 
+          <template v-else-if="currentView === 'knowledge'">
+            <div class="full-area">
+              <KnowledgeView />
+            </div>
+          </template>
+
           <template v-else-if="currentView === 'vulns'">
-             <div class="full-area empty-placeholder">
-               <el-empty description="漏洞管理模块开发中..." />
-             </div>
+            <div class="full-area">
+              <VulnsView />
+            </div>
           </template>
 
           <template v-else-if="currentView === 'monitor'">
-             <div class="full-area empty-placeholder">
-               <el-empty description="监控模块开发中..." />
-             </div>
+            <div class="full-area">
+              <MonitorView />
+            </div>
+          </template>
+
+          <template v-else-if="currentView === 'mcp'">
+            <div class="full-area">
+              <McpView />
+            </div>
           </template>
           
           <template v-else>

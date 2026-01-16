@@ -13,12 +13,18 @@ public class AttackChainNode {
     @Column(name = "conversation_id")
     private String conversationId;
 
-    private String type; // reconnaissance, initial_access, execution, persistence, etc.
+    private String type; // target, action, vulnerability
 
     private String label;
 
+    @Column(name = "risk_score")
+    private Integer riskScore;
+
     @Column(columnDefinition = "TEXT")
-    private String data; // JSON
+    private String metadata; // JSON
+
+    @Column(columnDefinition = "TEXT")
+    private String data; // JSON (保留向后兼容)
 
     @Column(name = "position_x")
     private Double positionX;
@@ -60,6 +66,22 @@ public class AttackChainNode {
 
     public void setLabel(String label) {
         this.label = label;
+    }
+
+    public Integer getRiskScore() {
+        return riskScore;
+    }
+
+    public void setRiskScore(Integer riskScore) {
+        this.riskScore = riskScore;
+    }
+
+    public String getMetadata() {
+        return metadata;
+    }
+
+    public void setMetadata(String metadata) {
+        this.metadata = metadata;
     }
 
     public String getData() {

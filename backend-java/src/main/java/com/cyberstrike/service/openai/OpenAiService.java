@@ -1,5 +1,6 @@
 package com.cyberstrike.service.openai;
 
+import com.cyberstrike.service.openai.model.OpenAIModels;
 import com.cyberstrike.service.openai.model.OpenAIModels.ChatCompletionRequest;
 import com.cyberstrike.service.openai.model.OpenAIModels.ChatCompletionResponse;
 import org.slf4j.Logger;
@@ -45,4 +46,13 @@ public class OpenAiService {
     // handle it differently.
     // For now, focus on non-stream or use simple input stream reading.
     // Spring RestClient supports exchange() which gives access to connection.
+
+    public OpenAIModels.EmbeddingResponse createEmbeddings(OpenAIModels.EmbeddingRequest request) {
+        return restClient.post()
+                .uri("/v1/embeddings")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(request)
+                .retrieve()
+                .body(OpenAIModels.EmbeddingResponse.class);
+    }
 }

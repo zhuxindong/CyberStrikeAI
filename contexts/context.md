@@ -73,11 +73,11 @@ AI 原生的安全测试平台，从 Go/SQLite 重构为 Java Spring Boot + Vue 
 | Vulnerability | ✅ 100% | CRUD + stats |
 | Knowledge | 🔶 82% | 缺 scan, deleteLog, **vector search** |
 | Monitor | ✅ 100% | executions + stats |
-| Role | ✅ 100% | CRUD |
+| Role | ✅ 100% | CRUD + **Pre-seeded Roles** |
 | Config | ✅ 100% | get/update/apply/tools |
 | Group | ✅ 100% | CRUD + conversation management |
 | **YAML Tools** | ✅ 100% | 114 个工具定义 |
-| BatchTask | ❌ 0% | 待实现 |
+| BatchTask | ✅ 100% | Queue/Task Entities + Controller |
 | ExternalMCP | ❌ 0% | 待实现 |
 | AttackChain | 🔶 50% | 缺 regenerate |
 
@@ -85,9 +85,11 @@ AI 原生的安全测试平台，从 Go/SQLite 重构为 Java Spring Boot + Vue 
 
 | 组件 | 状态 | 功能 |
 | :--- | :---: | :--- |
-| App.vue | ✅ | 主布局，视图切换 |
-| ChatWindow.vue | ✅ | 聊天界面，停止按钮 |
-| Sidebar.vue | ✅ | 对话列表 |
+| App.vue | ✅ | **Navigation Rail (Light)**，视图切换 |
+| ChatWindow.vue | ✅ | **Role Selector (Popover)**，Attack Chain Button，Chat |
+| Sidebar.vue | ✅ | **Conversation Sidebar** (Search, New Chat) |
+| RolesView.vue | ✅ | 角色 CRUD |
+| BatchQueueView.vue | ✅ | 批量任务管理 |
 | ToolsPanel.vue | ✅ | 工具列表 |
 | ConfigView.vue | ✅ | 系统配置 |
 
@@ -134,31 +136,34 @@ pnpm dev
 # 访问: http://localhost:5173
 ```
 
-## 当前状态 (2026-01-15 16:45)
+## 当前状态 (2026-01-15 17:30)
 
 ### 已完成
 
 - [x] 后端核心 API 全部完成
 - [x] Agent 模块全部接口
 - [x] Group 模块全部接口
-- [x] **YAML 工具配置系统** (NEW)
+- [x] **YAML 工具配置系统**
 - [x] 114 个工具定义复用
 - [x] 工具热加载
-- [x] 前端聊天界面 + 停止按钮
-- [x] 前端侧边栏
-- [x] 前端工具面板
-- [x] 前端配置页面
+- [x] **UI深度重构**: 侧边栏、导航栏、对话头 (Light Theme)
+- [x] **角色管理**: 
+    - [x] Popover 角色选择器 (富文本/图标)
+    - [x] 后端 8 个预设角色
+    - [x] 角色 CRUD 页面
+- [x] **批量任务**:
+    - [x] BatchQueue/BatchTask 后端实体与接口
+    - [x] 前端任务队列界面
 
 ### 待完成
 
-- [ ] BatchTask 模块 (批量任务)
 - [ ] ExternalMCP 模块 (外部 MCP 服务器)
 - [ ] 知识库向量检索 (search_knowledge_base)
 - [ ] 攻击链重新生成
-- [ ] 前端监控页面
+- [ ] 前端监控页面完善 (Charts)
 
 ## 下一步优先级
 
-1. **BatchTask 模块** - 批量任务队列
-2. **知识库向量检索** - search_knowledge_base
-3. **ExternalMCP 模块** - 外部 MCP 集成
+1. **知识库向量检索** - search_knowledge_base (P0)
+2. **ExternalMCP 模块** - 外部 MCP 集成 (P1)
+3. **攻击链重新生成** - (P2)

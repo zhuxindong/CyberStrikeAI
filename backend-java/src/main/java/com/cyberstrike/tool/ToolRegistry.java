@@ -25,9 +25,15 @@ public class ToolRegistry {
     private final Map<String, ToolDefinition> builtinTools = new HashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final YamlToolLoader yamlToolLoader;
+    private final com.cyberstrike.service.KnowledgeService knowledgeService;
+    private final com.cyberstrike.service.PythonVenvService pythonVenvService;
 
-    public ToolRegistry(YamlToolLoader yamlToolLoader) {
+    public ToolRegistry(YamlToolLoader yamlToolLoader,
+            com.cyberstrike.service.KnowledgeService knowledgeService,
+            com.cyberstrike.service.PythonVenvService pythonVenvService) {
         this.yamlToolLoader = yamlToolLoader;
+        this.knowledgeService = knowledgeService;
+        this.pythonVenvService = pythonVenvService;
         registerBuiltinTools();
         log.info("工具注册完成: {} 个内置工具, {} 个 YAML 工具",
                 builtinTools.size(), yamlToolLoader.getAllTools().size());
@@ -104,6 +110,91 @@ public class ToolRegistry {
                     String target = args.get("target").asText();
                     return executeCommand("tracert " + target);
                 });
+
+        // Python 工具
+        if (pythonVenvService != null) {
+            registerBuiltinTool("install_python_package", "在虚拟环境中安装 Python 包",
+                    """
+                            {"type":"object", "properties":{
+                                "package":{"type":"string", "description":"要安装的 Python 包名，如 requests, numpy"},
+                                "env_name":{"type":"string", "description":"虚拟环境名称，默认 default"},
+                                "additional_args":{"type":"string", "description":"额外的 pip 参数，如 --upgrade"}
+                            }, "required":["package"]}
+                            """,
+                    (args) -> {
+                        String pkg = args.get("package").asText();
+                        String envName = args.has("env_name") ? args.get("env_name").asText() : "default";
+                        String additionalArgs = args.has("additional_args") ? args.get("additional_args").asText() : "";
+                        return pythonVenvService.installPackage(pkg, envName, additionalArgs);
+                    });
+
+            registerBuiltinTool("execute_python_script", "在虚拟环境中执行 Python 脚本",
+                    """
+                            {"type":"object", "properties":{
+                                "script":{"type":"string", "description":"要执行的 Python 脚本内容"},
+                                "env_name":{"type":"string", "description":"虚拟环境名称，默认 default"},
+                                "additional_args":{"type":"string", "description":"额外的 Python 参数"}
+                            }, "required":["script"]}
+                            """,
+                    (args) -> {
+                        String script = args.get("script").asText();
+                        String envName = args.has("env_name") ? args.get("env_name").asText() : "default";
+                        String additionalArgs = args.has("additional_args") ? args.get("additional_args").asText() : "";
+                        return pythonVenvService.executeScript(script, envName, additionalArgs);
+                    });
+
+            registerBuiltinTool("execute_python_file", "在虚拟环境中执行 Python 文件",
+                    """
+                            {"type":"object", "properties":{
+                                "file_path":{"type":"string", "description":"Python 文件路径"},
+                                "env_name":{"type":"string", "description":"虚拟环境名称，默认 default"},
+                                "additional_args":{"type":"string", "description":"额外的命令行参数"}
+                            }, "required":["file_path"]}
+                            """,
+                    (args) -> {
+                        String filePath = args.get("file_path").asText();
+                        String envName = args.has("env_name") ? args.get("env_name").asText() : "default";
+                        String additionalArgs = args.has("additional_args") ? args.get("additional_args").asText() : "";
+                        return pythonVenvService.executeFile(filePath, envName, additionalArgs);
+                    });
+
+            registerBuiltinTool("list_python_packages", "列出虚拟环境中已安装的 Python 包",
+                    """
+                            {"type":"object", "properties":{
+                                "env_name":{"type":"string", "description":"虚拟环境名称，默认 default"}
+                            }}
+                            """,
+                    (args) -> {
+                        String envName = args.has("env_name") ? args.get("env_name").asText() : "default";
+                        return pythonVenvService.listPackages(envName);
+                    });
+        }
+
+        if (knowledgeService != null) {
+            registerBuiltinTool("search_knowledge_base", "知识库向量检索，查询项目文档、经验库等",
+                    """
+                            {"type":"object", "properties":{
+                                "query":{"type":"string", "description":"搜索关键词或自然语言问题"}
+                            }, "required":["query"]}
+                            """,
+                    (args) -> {
+                        String query = args.get("query").asText();
+                        try {
+                            List<com.cyberstrike.entity.KnowledgeItem> results = knowledgeService.search(query, 3);
+                            if (results.isEmpty()) {
+                                return "Knowledge Base: No relevant information found.";
+                            }
+                            StringBuilder sb = new StringBuilder("Knowledge Base Search Results:\n\n");
+                            for (com.cyberstrike.entity.KnowledgeItem item : results) {
+                                sb.append("--- [").append(item.getTitle()).append("] ---\n");
+                                sb.append(item.getContent()).append("\n\n");
+                            }
+                            return sb.toString();
+                        } catch (Exception e) {
+                            return "Knowledge Base Error: " + e.getMessage();
+                        }
+                    });
+        }
     }
 
     /**

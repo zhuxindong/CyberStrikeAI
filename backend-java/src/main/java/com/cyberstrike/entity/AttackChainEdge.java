@@ -14,10 +14,14 @@ public class AttackChainEdge {
     private String conversationId;
 
     @Column(name = "source_id")
-    private String sourceId;
+    private String source;
 
     @Column(name = "target_id")
-    private String targetId;
+    private String target;
+
+    private String type;
+
+    private Integer weight;
 
     private String label;
 
@@ -41,20 +45,36 @@ public class AttackChainEdge {
         this.conversationId = conversationId;
     }
 
-    public String getSourceId() {
-        return sourceId;
+    public String getSource() {
+        return source;
     }
 
-    public void setSourceId(String sourceId) {
-        this.sourceId = sourceId;
+    public void setSource(String source) {
+        this.source = source;
     }
 
-    public String getTargetId() {
-        return targetId;
+    public String getTarget() {
+        return target;
     }
 
-    public void setTargetId(String targetId) {
-        this.targetId = targetId;
+    public void setTarget(String target) {
+        this.target = target;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public Integer getWeight() {
+        return weight;
+    }
+
+    public void setWeight(Integer weight) {
+        this.weight = weight;
     }
 
     public String getLabel() {

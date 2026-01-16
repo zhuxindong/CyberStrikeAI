@@ -12,6 +12,8 @@ public interface KnowledgeItemRepository extends JpaRepository<KnowledgeItem, St
 
     List<KnowledgeItem> findByCategoryOrderByCreatedAtDesc(String category);
 
+    List<KnowledgeItem> findAllByOrderByUpdatedAtDesc();
+
     List<KnowledgeItem> findByTitleContainingOrContentContainingOrderByCreatedAtDesc(String titleKeyword,
             String contentKeyword);
 

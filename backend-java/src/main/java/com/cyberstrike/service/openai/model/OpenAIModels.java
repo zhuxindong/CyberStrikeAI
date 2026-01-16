@@ -536,4 +536,113 @@ public class OpenAIModels {
             this.totalTokens = totalTokens;
         }
     }
+    // --- Embeddings ---
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class EmbeddingRequest {
+        @JsonProperty("model")
+        private String model;
+        @JsonProperty("input")
+        private String input;
+
+        public EmbeddingRequest() {
+        }
+
+        public EmbeddingRequest(String model, String input) {
+            this.model = model;
+            this.input = input;
+        }
+
+        public String getModel() {
+            return model;
+        }
+
+        public void setModel(String model) {
+            this.model = model;
+        }
+
+        public String getInput() {
+            return input;
+        }
+
+        public void setInput(String input) {
+            this.input = input;
+        }
+    }
+
+    public static class EmbeddingResponse {
+        @JsonProperty("object")
+        private String object;
+        @JsonProperty("data")
+        private List<EmbeddingData> data;
+        @JsonProperty("model")
+        private String model;
+        @JsonProperty("usage")
+        private Usage usage;
+
+        public String getObject() {
+            return object;
+        }
+
+        public void setObject(String object) {
+            this.object = object;
+        }
+
+        public List<EmbeddingData> getData() {
+            return data;
+        }
+
+        public void setData(List<EmbeddingData> data) {
+            this.data = data;
+        }
+
+        public String getModel() {
+            return model;
+        }
+
+        public void setModel(String model) {
+            this.model = model;
+        }
+
+        public Usage getUsage() {
+            return usage;
+        }
+
+        public void setUsage(Usage usage) {
+            this.usage = usage;
+        }
+    }
+
+    public static class EmbeddingData {
+        @JsonProperty("object")
+        private String object;
+        @JsonProperty("index")
+        private Integer index;
+        @JsonProperty("embedding")
+        private List<Double> embedding;
+
+        public String getObject() {
+            return object;
+        }
+
+        public void setObject(String object) {
+            this.object = object;
+        }
+
+        public Integer getIndex() {
+            return index;
+        }
+
+        public void setIndex(Integer index) {
+            this.index = index;
+        }
+
+        public List<Double> getEmbedding() {
+            return embedding;
+        }
+
+        public void setEmbedding(List<Double> embedding) {
+            this.embedding = embedding;
+        }
+    }
 }

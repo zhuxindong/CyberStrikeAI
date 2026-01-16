@@ -4,6 +4,7 @@ import { streamChat } from '../utils/chatService';
 import MarkdownIt from 'markdown-it';
 import 'element-plus/theme-chalk/display.css';
 import { Promotion, Monitor, Loading, ChatLineRound, User, ArrowDown, Connection, Cpu, MagicStick, Box, Aim, ZoomIn, View, Cloudy, Check } from '@element-plus/icons-vue';
+import AttackChainView from './AttackChainView.vue';
 
 const md = new MarkdownIt();
 
@@ -27,6 +28,7 @@ const loading = ref(false);
 const currentConversationId = ref<string | undefined>(props.conversationId);
 const currentTaskId = ref<string | undefined>(undefined);
 const messagesContainer = ref<HTMLElement | null>(null);
+const showAttackChain = ref(false);
 
 // Role Management
 const roleIcons: Record<string, any> = {
@@ -325,8 +327,23 @@ const renderMarkdown = (text: string) => {
       <div class="button-group">
         <el-button type="primary" :loading="loading" @click="sendMessage" :disabled="loading">发送</el-button>
         <el-button v-if="loading" type="danger" @click="stopTask">停止</el-button>
+        <el-button 
+          v-if="currentConversationId && !loading" 
+          type="warning" 
+          @click="showAttackChain = true"
+        >
+          攻击链
+        </el-button>
       </div>
     </div>
+
+    <!-- 攻击链抽屉 -->
+    <AttackChainView
+      v-if="currentConversationId"
+      :conversation-id="currentConversationId"
+      :visible="showAttackChain"
+      @close="showAttackChain = false"
+    />
   </div>
 </template>
 

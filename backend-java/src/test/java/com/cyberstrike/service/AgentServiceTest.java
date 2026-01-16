@@ -38,6 +38,10 @@ class AgentServiceTest {
 
     @Mock
     private com.cyberstrike.tool.YamlToolLoader yamlToolLoader;
+    @Mock
+    private com.cyberstrike.service.KnowledgeService knowledgeService;
+    @Mock
+    private com.cyberstrike.service.PythonVenvService pythonVenvService;
 
     private ToolRegistry toolRegistry;
     private AgentService agentService;
@@ -49,7 +53,7 @@ class AgentServiceTest {
         when(yamlToolLoader.getAllTools()).thenReturn(Collections.emptyList());
         when(yamlToolLoader.getEnabledTools()).thenReturn(Collections.emptyList());
 
-        toolRegistry = new ToolRegistry(yamlToolLoader);
+        toolRegistry = new ToolRegistry(yamlToolLoader, knowledgeService, pythonVenvService);
 
         // Correct order: OpenAiService, ConversationRepository, MessageRepository,
         // ToolRegistry, String modelName
