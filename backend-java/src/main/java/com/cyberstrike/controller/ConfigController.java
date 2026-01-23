@@ -1,8 +1,11 @@
 package com.cyberstrike.controller;
 
+import com.cyberstrike.entity.Config;
+import com.cyberstrike.repository.ConfigRepository;
 import com.cyberstrike.tool.ToolRegistry;
 import com.cyberstrike.tool.YamlToolLoader;
 import com.cyberstrike.tool.YamlToolDefinition;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,8 +19,11 @@ public class ConfigController {
     private final ToolRegistry toolRegistry;
     private final YamlToolLoader yamlToolLoader;
 
+    @Autowired
+    private ConfigRepository configRepository;
+
     // 内存配置存储 (实际应使用数据库)
-    private Map<String, Object> config = new HashMap<>();
+//    private Map<String, Object> config = new HashMap<>();
     // 工具启用状态记录
     private final Map<String, Boolean> toolEnabledStatus = new HashMap<>();
 
@@ -25,24 +31,32 @@ public class ConfigController {
         this.toolRegistry = toolRegistry;
         this.yamlToolLoader = yamlToolLoader;
         // 默认配置
-        config.put("openai", Map.of(
-                "apiKey", "",
-                "baseUrl", "https://api.openai.com/v1",
-                "model", "gpt-4o"));
-        config.put("agent", Map.of(
-                "maxIterations", 10));
-        config.put("language", "zh-CN");
-        config.put("theme", "dark");
+//        config.put("openai", Map.of(
+//                "apiKey", "",
+//                "baseUrl", "https://api.openai.com/v1",
+//                "model", "gpt-4o"));
+//        config.put("agent", Map.of(
+//                "maxIterations", 10));
+//        config.put("language", "zh-CN");
+//        config.put("theme", "dark");
     }
 
     @GetMapping
     public ResponseEntity<?> getConfig() {
-        return ResponseEntity.ok(config);
+        java.util.Optional<Config> optionalConfig = configRepository.findById(1l);
+        // 判断数据是否存在
+        if (optionalConfig.isPresent()) {
+            Config config = optionalConfig.get();
+            return ResponseEntity.ok(config);
+        }
+        return null;
     }
 
     @PutMapping
-    public ResponseEntity<?> updateConfig(@RequestBody Map<String, Object> body) {
-        config.putAll(body);
+    public ResponseEntity<?> updateConfig(@RequestBody Config config) {
+        //config.putAll(body);
+        config.setId(1l);
+        configRepository.save(config);
         return ResponseEntity.ok(config);
     }
 

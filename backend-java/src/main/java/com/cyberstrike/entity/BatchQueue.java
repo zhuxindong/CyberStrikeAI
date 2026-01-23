@@ -1,5 +1,6 @@
 package com.cyberstrike.entity;
 
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -31,8 +32,9 @@ public class BatchQueue {
     @Column(name = "current_index")
     private int currentIndex = 0;
 
-    @OneToMany(mappedBy = "queue", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "queue", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @OrderBy("id ASC") // Assuming ID order roughly equals insertion order, or add explicit index field
+    @JsonManagedReference
     private List<BatchTask> tasks = new ArrayList<>();
 
     // Getters and Setters
