@@ -196,7 +196,7 @@ onMounted(() => {
       <el-table :data="currentQueue.tasks" style="width: 100%" height="calc(100% - 120px)">
         <el-table-column type="index" width="50" label="#" />
         <el-table-column prop="message" label="任务指令" min-width="200" show-overflow-tooltip />
-        <el-table-column label="状态" width="100">
+        <el-table-column label="状态" width="150">
           <template #default="{ row }">
              <el-tag 
                size="small" 
