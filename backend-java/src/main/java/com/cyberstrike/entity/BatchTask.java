@@ -1,5 +1,6 @@
 package com.cyberstrike.entity;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -10,8 +11,9 @@ public class BatchTask {
     @Id
     private String id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "queue_id", nullable = false)
+    @JsonBackReference
     private BatchQueue queue;
 
     @Column(nullable = false, columnDefinition = "TEXT")

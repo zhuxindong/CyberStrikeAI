@@ -8,9 +8,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 /**
@@ -43,84 +46,151 @@ public class ToolRegistry {
      * 注册内置工具（仅保留必要的基础工具）
      */
     private void registerBuiltinTools() {
+
+        // ==================================================================
+        // 核心修复：通用的命令执行函数 (解决 Windows 中文乱码)
+        // 使用 GBK 编码读取流，防止 whois/nslookup/tracert 输出乱码
+        // ==================================================================
+        BiFunction<JsonNode, String, String> executeCommandWin = (args, command) -> {
+            StringBuilder output = new StringBuilder();
+            Process process = null;
+            BufferedReader reader = null;
+
+            try {
+                // 1. 构建进程 (使用 cmd /c 执行命令)
+                ProcessBuilder pb = new ProcessBuilder("cmd", "/c", command);
+                pb.redirectErrorStream(true); // 合并错误流和输出流
+                process = pb.start();
+
+                // 2. 核心修复：强制使用 GBK 编码读取 (Windows 控制台默认编码)
+                // 如果是 Linux/Mac，这里应改为 UTF-8
+                InputStreamReader isr = new InputStreamReader(process.getInputStream(), "GBK");
+                reader = new BufferedReader(isr);
+
+                // 3. 读取输出
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append("\n");
+                }
+
+                // 4. 等待进程结束
+                process.waitFor(10, TimeUnit.SECONDS); // 设置超时，防止挂起
+
+            } catch (Exception e) {
+                output.append("Command Execution Error: ").append(e.getMessage());
+            } finally {
+                // 关闭资源
+                try { if (reader != null) reader.close(); } catch (IOException e) { /* 忽略 */ }
+                if (process != null) process.destroy();
+            }
+
+            return output.toString();
+        };
+
         // 保留一些简单的基础工具作为后备
         registerBuiltinTool("ping_host", "Ping 目标主机检查可达性",
                 """
-                        {"type":"object", "properties":{
-                            "target":{"type":"string", "description":"目标 IP 或域名"},
-                            "count":{"type":"integer", "description":"Ping 次数，默认 4"}
-                        }, "required":["target"]}
-                        """,
+                    {"type":"object", "properties":{
+                        "target":{"type":"string", "description":"目标 IP 或域名"},
+                        "count":{"type":"integer", "description":"Ping 次数，默认 4"}
+                    }, "required":["target"]}
+                """,
                 (args) -> {
                     String target = args.get("target").asText();
                     int count = args.has("count") ? args.get("count").asInt() : 4;
-                    return executeCommand("ping -n " + count + " " + target);
+
+                    // 构建命令字符串
+                    String cmd = "ping -n " + count + " " + target;
+
+                    // 直接复用 executeCommandWin，无需重复写乱码修复逻辑
+                    return executeCommandWin.apply(args, cmd);
                 });
 
+
+        // ==================================================================
+        // 网络侦查工具 (使用上面修复乱码的函数)
+        // ==================================================================
+
+        // WHOIS 查询
         registerBuiltinTool("whois_lookup", "WHOIS 查询，获取域名注册信息",
                 """
-                        {"type":"object", "properties":{
-                            "domain":{"type":"string", "description":"要查询的域名"}
-                        }, "required":["domain"]}
-                        """,
+                {"type":"object", "properties":{
+                    "domain":{"type":"string", "description":"要查询的域名，例如 example.com"}
+                }, "required":["domain"]}
+                """,
                 (args) -> {
                     String domain = args.get("domain").asText();
-                    return executeCommand("whois " + domain);
+                    // 直接拼接命令并执行
+                    String cmd = "whois " + domain;
+                    return executeCommandWin.apply(args, cmd);
                 });
 
+        // DNS 查询 (nslookup)
         registerBuiltinTool("dig_dns", "DNS 查询工具",
                 """
-                        {"type":"object", "properties":{
-                            "domain":{"type":"string", "description":"要查询的域名"},
-                            "type":{"type":"string", "description":"记录类型，如 A, MX, NS, TXT"}
-                        }, "required":["domain"]}
-                        """,
+                {"type":"object", "properties":{
+                    "domain":{"type":"string", "description":"要查询的域名"},
+                    "type":{"type":"string", "description":"记录类型，如 A, MX, NS, TXT"}
+                }, "required":["domain"]}
+                """,
                 (args) -> {
                     String domain = args.get("domain").asText();
                     String type = args.has("type") ? args.get("type").asText() : "A";
-                    return executeCommand("nslookup -type=" + type + " " + domain);
+                    String cmd = "nslookup -type=" + type + " " + domain;
+                    return executeCommandWin.apply(args, cmd);
                 });
 
+        // 路由追踪 (tracert)
+        registerBuiltinTool("traceroute", "路由追踪",
+                """
+                {"type":"object", "properties":{
+                    "target":{"type":"string", "description":"目标 IP 或域名"}
+                }, "required":["target"]}
+                """,
+                (args) -> {
+                    String target = args.get("target").asText();
+                    String cmd = "tracert " + target;
+                    return executeCommandWin.apply(args, cmd);
+                });
+
+        // HTTP 请求 (curl)
+        // 注意：Curl 获取的网页通常是 UTF-8，但命令行提示符可能是 GBK
+        // 这里为了防止命令错误提示乱码，依然使用 GBK 执行
         registerBuiltinTool("curl_request", "发送 HTTP 请求",
                 """
-                        {"type":"object", "properties":{
-                            "url":{"type":"string", "description":"目标 URL"},
-                            "method":{"type":"string", "description":"HTTP 方法，默认 GET"},
-                            "data":{"type":"string", "description":"POST 数据"}
-                        }, "required":["url"]}
-                        """,
+                {"type":"object", "properties":{
+                    "url":{"type":"string", "description":"目标 URL"},
+                    "method":{"type":"string", "description":"HTTP 方法，默认 GET"},
+                    "data":{"type":"string", "description":"POST 数据"}
+                }, "required":["url"]}
+                """,
                 (args) -> {
                     String url = args.get("url").asText();
                     String method = args.has("method") ? args.get("method").asText() : "GET";
-                    StringBuilder cmd = new StringBuilder("curl -s -X " + method);
+                    StringBuilder cmd = new StringBuilder("curl -s -X ").append(method);
+
                     if (args.has("data")) {
                         cmd.append(" -d \"").append(args.get("data").asText()).append("\"");
                     }
                     cmd.append(" \"").append(url).append("\"");
-                    return executeCommand(cmd.toString());
+
+                    return executeCommandWin.apply(args, cmd.toString());
                 });
 
-        registerBuiltinTool("traceroute", "路由追踪",
-                """
-                        {"type":"object", "properties":{
-                            "target":{"type":"string", "description":"目标 IP 或域名"}
-                        }, "required":["target"]}
-                        """,
-                (args) -> {
-                    String target = args.get("target").asText();
-                    return executeCommand("tracert " + target);
-                });
-
-        // Python 工具
+        // ==================================================================
+        // Python 开发与执行工具
+        // 注意：Python 的乱码修复需要在 pythonVenvService 内部实现
+        // (确保其内部也是用 GBK 读取流，逻辑同上)
+        // ==================================================================
         if (pythonVenvService != null) {
             registerBuiltinTool("install_python_package", "在虚拟环境中安装 Python 包",
                     """
-                            {"type":"object", "properties":{
-                                "package":{"type":"string", "description":"要安装的 Python 包名，如 requests, numpy"},
-                                "env_name":{"type":"string", "description":"虚拟环境名称，默认 default"},
-                                "additional_args":{"type":"string", "description":"额外的 pip 参数，如 --upgrade"}
-                            }, "required":["package"]}
-                            """,
+                    {"type":"object", "properties":{
+                        "package":{"type":"string", "description":"要安装的 Python 包名，如 requests, numpy"},
+                        "env_name":{"type":"string", "description":"虚拟环境名称，默认 default"},
+                        "additional_args":{"type":"string", "description":"额外的 pip 参数，如 --upgrade"}
+                    }, "required":["package"]}
+                    """,
                     (args) -> {
                         String pkg = args.get("package").asText();
                         String envName = args.has("env_name") ? args.get("env_name").asText() : "default";
@@ -130,53 +200,30 @@ public class ToolRegistry {
 
             registerBuiltinTool("execute_python_script", "在虚拟环境中执行 Python 脚本",
                     """
-                            {"type":"object", "properties":{
-                                "script":{"type":"string", "description":"要执行的 Python 脚本内容"},
-                                "env_name":{"type":"string", "description":"虚拟环境名称，默认 default"},
-                                "additional_args":{"type":"string", "description":"额外的 Python 参数"}
-                            }, "required":["script"]}
-                            """,
+                    {"type":"object", "properties":{
+                        "script":{"type":"string", "description":"要执行的 Python 脚本内容"},
+                        "env_name":{"type":"string", "description":"虚拟环境名称，默认 default"},
+                        "additional_args":{"type":"string", "description":"额外的 Python 参数"}
+                    }, "required":["script"]}
+                    """,
                     (args) -> {
                         String script = args.get("script").asText();
                         String envName = args.has("env_name") ? args.get("env_name").asText() : "default";
                         String additionalArgs = args.has("additional_args") ? args.get("additional_args").asText() : "";
                         return pythonVenvService.executeScript(script, envName, additionalArgs);
                     });
-
-            registerBuiltinTool("execute_python_file", "在虚拟环境中执行 Python 文件",
-                    """
-                            {"type":"object", "properties":{
-                                "file_path":{"type":"string", "description":"Python 文件路径"},
-                                "env_name":{"type":"string", "description":"虚拟环境名称，默认 default"},
-                                "additional_args":{"type":"string", "description":"额外的命令行参数"}
-                            }, "required":["file_path"]}
-                            """,
-                    (args) -> {
-                        String filePath = args.get("file_path").asText();
-                        String envName = args.has("env_name") ? args.get("env_name").asText() : "default";
-                        String additionalArgs = args.has("additional_args") ? args.get("additional_args").asText() : "";
-                        return pythonVenvService.executeFile(filePath, envName, additionalArgs);
-                    });
-
-            registerBuiltinTool("list_python_packages", "列出虚拟环境中已安装的 Python 包",
-                    """
-                            {"type":"object", "properties":{
-                                "env_name":{"type":"string", "description":"虚拟环境名称，默认 default"}
-                            }}
-                            """,
-                    (args) -> {
-                        String envName = args.has("env_name") ? args.get("env_name").asText() : "default";
-                        return pythonVenvService.listPackages(envName);
-                    });
         }
 
+        // ==================================================================
+        // 知识库检索
+        // ==================================================================
         if (knowledgeService != null) {
             registerBuiltinTool("search_knowledge_base", "知识库向量检索，查询项目文档、经验库等",
                     """
-                            {"type":"object", "properties":{
-                                "query":{"type":"string", "description":"搜索关键词或自然语言问题"}
-                            }, "required":["query"]}
-                            """,
+                    {"type":"object", "properties":{
+                        "query":{"type":"string", "description":"搜索关键词或自然语言问题"}
+                    }, "required":["query"]}
+                    """,
                     (args) -> {
                         String query = args.get("query").asText();
                         try {
@@ -195,6 +242,7 @@ public class ToolRegistry {
                         }
                     });
         }
+
     }
 
     /**
@@ -317,7 +365,7 @@ public class ToolRegistry {
         }
     }
 
-    private void registerBuiltinTool(String name, String description, String parametersJson,
+    public void registerBuiltinTool(String name, String description, String parametersJson,
             Function<JsonNode, String> executor) {
         try {
             JsonNode params = objectMapper.readTree(parametersJson);

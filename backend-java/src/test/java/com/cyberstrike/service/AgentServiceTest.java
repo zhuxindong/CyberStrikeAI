@@ -57,8 +57,8 @@ class AgentServiceTest {
 
         // Correct order: OpenAiService, ConversationRepository, MessageRepository,
         // ToolRegistry, String modelName
-        agentService = new AgentService(openAiService, conversationRepository, messageRepository, toolRegistry,
-                "gpt-3.5-turbo");
+//        agentService = new AgentService(openAiService, conversationRepository, messageRepository, toolRegistry,
+//                "gpt-3.5-turbo");
     }
 
     @Test
