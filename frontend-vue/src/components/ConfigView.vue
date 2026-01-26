@@ -4,14 +4,12 @@ import { ElMessage } from 'element-plus';
 import { Search, Refresh } from '@element-plus/icons-vue';
 
 interface Config {
-  openai: {
-    apiKey: string;
-    baseUrl: string;
-    model: string;
-  };
-  agent: {
-    maxIterations: number;
-  };
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  maxIterations: number;
+  language?: string;
+  theme?: string;
 }
 
 interface ToolInfo {
@@ -22,8 +20,12 @@ interface ToolInfo {
 }
 
 const config = ref<Config>({
-  openai: { apiKey: '', baseUrl: '', model: '' },
-  agent: { maxIterations: 10 }
+  apiKey: '',
+  baseUrl: '',
+  model: '',
+  language: '',
+  theme: '',
+  maxIterations: 10
 });
 
 const tools = ref<ToolInfo[]>([]);
@@ -59,10 +61,7 @@ const loadConfig = async () => {
     const response = await fetch('/api/config');
     if (response.ok) {
       const data = await response.json();
-      config.value = {
-        openai: data.openai || { apiKey: '', baseUrl: '', model: '' },
-        agent: data.agent || { maxIterations: 10 }
-      };
+      config.value = data;
     }
   } catch (error) {
     console.error('加载配置失败:', error);
@@ -168,7 +167,7 @@ onMounted(() => {
           <el-form label-width="120px">
             <el-form-item label="API Key">
               <el-input 
-                v-model="config.openai.apiKey" 
+                v-model="config.apiKey" 
                 type="password" 
                 show-password
                 placeholder="sk-..."
@@ -176,13 +175,13 @@ onMounted(() => {
             </el-form-item>
             <el-form-item label="Base URL">
               <el-input 
-                v-model="config.openai.baseUrl" 
+                v-model="config.baseUrl" 
                 placeholder="https://api.openai.com/v1"
               />
               <div class="hint">支持 OpenAI、DeepSeek、Azure 等兼容接口</div>
             </el-form-item>
             <el-form-item label="模型">
-              <el-select v-model="config.openai.model" filterable allow-create placeholder="选择或输入模型">
+              <el-select v-model="config.model" filterable allow-create placeholder="选择或输入模型">
                 <el-option label="gpt-4" value="gpt-4" />
                 <el-option label="gpt-4-turbo" value="gpt-4-turbo" />
                 <el-option label="gpt-4o" value="gpt-4o" />
@@ -204,7 +203,7 @@ onMounted(() => {
           <el-form label-width="140px">
             <el-form-item label="最大迭代次数">
               <el-input-number 
-                v-model="config.agent.maxIterations" 
+                v-model="config.maxIterations"
                 :min="1" 
                 :max="50"
               />

@@ -95,13 +95,10 @@ const loadConversationHistory = async (conversationId: string) => {
 
 // 监听 prop 变化，加载历史消息
 watch(() => props.conversationId, async (newId) => {
-  if (newId && newId !== currentConversationId.value) {
+  messages.value = [];
+  if(newId) {
     currentConversationId.value = newId;
-    messages.value = [];
     await loadConversationHistory(newId);
-  } else if (!newId) {
-    currentConversationId.value = undefined;
-    messages.value = [];
   }
 }, { immediate: true });
 
@@ -115,7 +112,6 @@ const scrollToBottom = async () => {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
   }
 };
-
 
 const sendMessage = async () => {
   if (!input.value.trim() || loading.value) return;
@@ -136,6 +132,9 @@ const sendMessage = async () => {
   streamChat(userMsg, {
     onMessage: (content, type, data) => {
       // 保存任务ID
+      if (typeof data === 'string') {
+        data = JSON.parse(data);
+      }
       if (type === 'task_started' && data?.taskId) {
         currentTaskId.value = data.taskId;
         if (data.conversationId) {
