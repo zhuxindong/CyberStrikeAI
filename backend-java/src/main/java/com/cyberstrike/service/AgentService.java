@@ -153,12 +153,14 @@ public class AgentService {
 
         executor.submit(() -> {
             try {
+
+                // Save User Message (注意：这里传入了空字符串占位 functionName 和 resultStatus)
+                String id = saveMessage(conversationId, "user", "", request.getMessage(), "", "", "user","",null,null);
+
                 // 发送任务 ID
-                sendSseEvent(emitter, "task_started", "任务已开始",
+                sendSseEvent(emitter, "conversation", "任务已开始",
                         String.format("{\"taskId\": \"%s\", \"conversationId\": \"%s\"}", taskId, conversationId));
 
-                // Save User Message
-                saveMessage(conversationId, "user", request.getMessage());
 
                 // Prepare Messages
                 List<ChatCompletionMessage> messages = new ArrayList<>();
@@ -177,18 +179,28 @@ public class AgentService {
 
                 String finalResponse = "";
 
-                for (int i = 0; i < maxIterations; i++) {
+                // --- 定义计数器 Map ---
+                Map<String, Integer> functionCallCount = new HashMap<>();
+
+                for (int i = 1; i <= maxIterations; i++) {
                     // 检查是否被取消
                     if (task.cancelled) {
-                        sendSseEvent(emitter, "cancelled", "任务已被取消", null);
+                        sendSseEvent(emitter, "cancelled", "任务已被用户取消，后续操作已停止。", null);
+                        saveMessage(conversationId, "assistant", "", "任务已被用户取消，后续操作已停止。", "","success","cancelled",id,"",null);
                         task.status = "cancelled";
                         task.completedAt = LocalDateTime.now();
                         moveToCompleted(taskId, task);
                         emitter.complete();
                         return;
                     }
+                    sendSseEvent(emitter, "iteration", "开始分析请求并制定测试策略",String.format("{\"iteration\": \"%s\"}", i));
 
-                    sendSseEvent(emitter, "progress", "正在思考 (Iter " + (i + 1) + ")...", null);
+                    saveMessage(conversationId, "assistant", "", "开始分析请求并制定测试策略", "","success","iteration",id,String.valueOf(i),null);
+
+                    sendSseEvent(emitter, "progress", "正在调用AI模型...", null);
+
+                    saveMessage(conversationId, "assistant", "", "正在调用AI模型...", "","success","progress",id,String.valueOf(i),null);
+
 
                     ChatCompletionRequest aiRequest = ChatCompletionRequest.builder()
                             .model(getCurrentModel())
@@ -207,40 +219,89 @@ public class AgentService {
                     messages.add(message);
 
                     if (message.getContent() != null) {
-                        sendSseEvent(emitter, "thinking", message.getContent(), "{\"iteration\": " + (i + 1) + "}");
+                        sendSseEvent(emitter, "thinking", message.getContent(), null);
+                        saveMessage(conversationId, "assistant", "", message.getContent(), "","success","thinking",id,String.valueOf(i),null);
                     }
 
                     if ("tool_calls".equals(choice.getFinishReason()) && message.getToolCalls() != null) {
+
                         for (ToolCall toolCall : message.getToolCalls()) {
                             // 检查取消
                             if (task.cancelled) {
-                                sendSseEvent(emitter, "cancelled", "任务已被取消", null);
+                                sendSseEvent(emitter, "cancelled", "任务已被用户取消，后续操作已停止。", null);
+                                saveMessage(conversationId, "assistant", "", "任务已被用户取消，后续操作已停止。", "","success","cancelled",id,"",null);
+
                                 task.status = "cancelled";
                                 task.completedAt = LocalDateTime.now();
                                 moveToCompleted(taskId, task);
                                 emitter.complete();
                                 return;
                             }
+                            sendSseEvent(emitter, "tool_calls_detected", "检测到 1 个工具调用",null);
+                            saveMessage(conversationId, "assistant", "", "检测到 1 个工具调用", "","success","tool_calls_detected",id,String.valueOf(i),null);
 
-                            String functionName = toolCall.getFunction().getName();
+
+                            String rawFunctionName = toolCall.getFunction().getName();
                             String arguments = toolCall.getFunction().getArguments();
                             String callId = toolCall.getId();
 
-                            sendSseEvent(emitter, "tool_call", "正在调用工具: " + functionName,
-                                    String.format("{\"toolName\": \"%s\", \"arguments\": %s}", functionName,
-                                            arguments));
+                            // --- 生成带序号的名称 ---
+                            int count = functionCallCount.getOrDefault(rawFunctionName, 0) + 1;
+                            functionCallCount.put(rawFunctionName, count);
+                            String functionNameWithIndex = rawFunctionName + "#" + count;
 
-                            // Execute Tool
-                            String result = toolRegistry.execute(functionName, arguments);
+                            // --- 执行工具并捕获结果 ---
+                            String result;
+                            String resultStatus;
+
+                            try {
+                                result = toolRegistry.execute(rawFunctionName, arguments);
+                                // 检查返回内容是否包含错误
+                                if (result.contains("Error") || result.contains("Exception") || result.contains("SyntaxError")) {
+                                    resultStatus = "failed";
+                                    result = "执行出错: " + result;
+                                } else {
+                                    resultStatus = "success";
+                                }
+                            } catch (Exception e) {
+                                result = "执行异常: " + e.getMessage();
+                                resultStatus = "failed";
+                            }
+
+                            // --- 保存工具调用记录 (包含序号和状态) ---
+                            // 注意参数顺序: conversationId, role, functionName, content, resultStatus
+                            saveMessage(
+                                    conversationId,
+                                    "assistant",
+                                    rawFunctionName,
+                                    "正在调用工具: " + rawFunctionName,
+                                    functionNameWithIndex,
+                                    resultStatus,
+                                    "tool_call",id,String.valueOf(i),String.format("{\"toolName\": \"%s\", \"arguments\": %s}", rawFunctionName, arguments)
+                            );
+
+                            sendSseEvent(emitter, "tool_call", "正在调用工具: " + rawFunctionName,
+                                    String.format("{\"toolName\": \"%s\", \"arguments\": %s}", rawFunctionName, arguments));
+
+                            // --- 保存工具结果记录 ---
+                            saveMessage(
+                                    conversationId,
+                                    "assistant",
+                                    rawFunctionName,
+                                    result,
+                                    functionNameWithIndex,
+                                    resultStatus,
+                                    "tool_result", id,String.valueOf(i),String.format("{\"toolName\": \"%s\"}", rawFunctionName)
+                            );
 
                             sendSseEvent(emitter, "tool_result", result,
-                                    String.format("{\"toolName\": \"%s\"}", functionName));
+                                    String.format("{\"toolName\": \"%s\"}", rawFunctionName));
 
-                            // Add Tool Message
+                            // Add Tool Message (给 AI 的上下文 name 用原始名称)
                             messages.add(ChatCompletionMessage.builder()
                                     .role("tool")
                                     .toolCallId(callId)
-                                    .name(functionName)
+                                    .name(rawFunctionName)
                                     .content(result)
                                     .build());
                         }
@@ -250,12 +311,15 @@ public class AgentService {
                     }
                 }
 
-                // Save Assistant Message
-                saveMessage(conversationId, "assistant", finalResponse);
+                // Save Assistant Message (最终回复没有 functionName)
+                saveMessage(conversationId, "assistant", "", finalResponse, "","success","result",id,"",null);
 
                 // Send Response
                 sendSseEvent(emitter, "response", finalResponse, "{\"conversationId\": \"" + conversationId + "\"}");
+                saveMessage(conversationId, "assistant", "", finalResponse, "","success","response",id,"",null);
+
                 sendSseEvent(emitter, "done", "", null);
+                saveMessage(conversationId, "assistant", "", "", "","success","done",id,"",null);
 
                 task.status = "completed";
                 task.completedAt = LocalDateTime.now();
@@ -331,15 +395,25 @@ public class AgentService {
         return conversationId;
     }
 
-    private void saveMessage(String conversationId, String role, String content) {
+    private String saveMessage(String conversationId, String role,String mcp,
+                               String content, String functionName, String resultStatus,
+                               String type,String requestId,String iteration,String dataJson) {
         Message msg = new Message();
         msg.setConversationId(conversationId);
         msg.setRole(role);
+        msg.setMcpExecutionIds(mcp);
         msg.setContent(content);
+        msg.setFunctionName(functionName);
+        msg.setResultStatus(resultStatus);
+        msg.setType(type);
+        msg.setRequestId(requestId);
+        msg.setIteration(iteration);
+        msg.setDataJson(dataJson);
         messageRepository.save(msg);
+        return msg.getId();
     }
 
-    // 同步执行任务（用于内部调用，如 BatchTask）
+//     同步执行任务（用于内部调用，如 BatchTask）
     public String executeTaskSync(String conversationId, String messageText) {
         String taskId = UUID.randomUUID().toString();
         TaskInfo task = new TaskInfo();
@@ -352,7 +426,7 @@ public class AgentService {
 
         try {
             // Save User Message
-            saveMessage(conversationId, "user", messageText);
+            String id = saveMessage(conversationId, "user","", messageText,"","","0","","",null);
 
             // Prepare Messages
             List<ChatCompletionMessage> messages = new ArrayList<>();
@@ -370,7 +444,10 @@ public class AgentService {
             int maxIterations = getMaxIterations();
             String finalResponse = "";
 
-            for (int i = 0; i < maxIterations; i++) {
+            // --- 1. 在 for 循环外部定义一个计数器 ---
+            Map<String, Integer> functionCallCount = new HashMap<>();
+
+            for (int i = 1; i <= maxIterations; i++) {
                 if (task.cancelled) {
                     task.status = "cancelled";
                     task.completedAt = LocalDateTime.now();
@@ -403,18 +480,77 @@ public class AgentService {
                             return "Task Cancelled";
                         }
 
-                        String functionName = toolCall.getFunction().getName();
+                        String rawFunctionName = toolCall.getFunction().getName();
                         String arguments = toolCall.getFunction().getArguments();
                         String callId = toolCall.getId();
 
-                        // Execute Tool
-                        String result = toolRegistry.execute(functionName, arguments);
+                        // --- 2. 核心逻辑：更新计数器并生成带序号的名称 ---
+                        // 获取当前函数名已出现的次数，如果第一次出现则默认为 0，然后 +1
+                        int count = functionCallCount.getOrDefault(rawFunctionName, 0) + 1;
+                        // 更新 Map，下次再遇到同名函数时计数会增加
+                        functionCallCount.put(rawFunctionName, count);
 
-                        // Add Tool Message
+                        // 拼接最终名称，例如：execute_script#1
+                        String functionNameWithIndex = rawFunctionName + "#" + count;
+
+                        // Execute Tool
+
+                        String result ;
+                        String resultStatus;
+
+                        try {
+                            result = toolRegistry.execute(rawFunctionName, arguments);
+                            // 检查返回内容是否包含错误
+                            if (result.contains("Error") || result.contains("Exception") || result.contains("SyntaxError")) {
+                                resultStatus = "failed";
+                                result = "执行出错: " + result;
+                            } else {
+                                resultStatus = "success";
+                            }
+                        } catch (Exception e) {
+                            result = "执行异常: " + e.getMessage();
+                            resultStatus = "failed";
+                        }
+
+                        // --- 保存工具调用记录 (包含序号和状态) ---
+                        // 注意参数顺序: conversationId, role, functionName, content, resultStatus
+                        saveMessage(
+                                conversationId,
+                                "assistant",
+                                rawFunctionName,
+                                String.format("调用工具: %s, 参数: %s", rawFunctionName, arguments),
+                                functionNameWithIndex,
+                                resultStatus,
+                                "1",id,String.valueOf(i)
+                                ,null);
+
+                        // 如果执行成功，还要检查返回的结果内容，防止包含错误关键词
+                        if (result.contains("Error") || result.contains("Exception") || result.contains("SyntaxError")) {
+                            resultStatus = "fail";
+                            // 可选：修改 result 内容，明确告知 AI 这是执行后的错误
+                            result = "工具执行返回错误: " + result;
+                        } else {
+                            resultStatus = "success";
+                        }
+
+                        // --- 3. 保存记录 (使用带序号的名称) ---
+                        // 注意：参数顺序根据你的代码调整为 (..., functionName, content, resultStatus)
+                        // 请务必确认你的 saveMessage 方法参数定义是否匹配
+                        saveMessage(
+                                conversationId,
+                                "assistant",
+                                rawFunctionName,
+                                String.format("调用工具: %s, 参数: %s", rawFunctionName, arguments), // 内容可以保留原始名或带序号
+                                resultStatus,
+                                functionNameWithIndex, // 使用带序号的名称存入数据库
+                                "2",id,String.valueOf(i)
+                                ,null);
+
+                        // --- 4. Add Tool Message (给 AI 看的上下文通常用原始名称) ---
                         messages.add(ChatCompletionMessage.builder()
                                 .role("tool")
                                 .toolCallId(callId)
-                                .name(functionName)
+                                .name(rawFunctionName) // 这里通常传原始名给 AI
                                 .content(result)
                                 .build());
                     }
@@ -423,9 +559,8 @@ public class AgentService {
                     break;
                 }
             }
-
             // Save Assistant Message
-            saveMessage(conversationId, "assistant", finalResponse);
+            saveMessage(conversationId, "assistant","all", finalResponse, "all", "success","3",id,"",null);
 
             task.status = "completed";
             task.completedAt = LocalDateTime.now();

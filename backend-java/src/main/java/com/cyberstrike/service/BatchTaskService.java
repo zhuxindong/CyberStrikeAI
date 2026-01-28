@@ -143,9 +143,9 @@ public class BatchTaskService {
                 fullMessage = "Rule/Role: " + task.getQueue().getRole() + "\nTask: " + fullMessage;
             }
 
-            String result = agentService.executeTaskSync(conv.getId(), fullMessage);
+            //String result = agentService.executeTaskSync(conv.getId(), fullMessage);
 
-            task.setResult(result);
+            //task.setResult(result);
             task.setStatus("completed");
         } catch (Exception e) {
             task.setError(e.getMessage());

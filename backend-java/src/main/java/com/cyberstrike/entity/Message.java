@@ -28,13 +28,37 @@ public class Message {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "function_name", nullable = false)
+    private String functionName;
+
+    @Column(name = "result_status", nullable = false)
+    private String resultStatus;
+
+    @Column(name = "type", nullable = false)
+    private String type;
+
+    @Column(name = "request_id", nullable = false)
+    private String requestId;
+
+    @Column(name = "iteration", nullable = false)
+    private String iteration;
+
+    @Column(name = "data_json",columnDefinition = "LONGTEXT", nullable = false)
+    private String dataJson;
+
     public Message() {
     }
 
-    public Message(String conversationId, String role, String content) {
+    public Message(String conversationId, String role, String content, String functionName, String resultStatus, String type, String requestId, String iteration, String dataJson) {
         this.conversationId = conversationId;
         this.role = role;
         this.content = content;
+        this.functionName = functionName;
+        this.resultStatus = resultStatus;
+        this.type = type;
+        this.requestId = requestId;
+        this.iteration = iteration;
+        this.dataJson = dataJson;
     }
 
     @jakarta.persistence.PrePersist
@@ -89,5 +113,53 @@ public class Message {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getFunctionName() {
+        return functionName;
+    }
+
+    public void setFunctionName(String functionName) {
+        this.functionName = functionName;
+    }
+
+    public String getResultStatus() {
+        return resultStatus;
+    }
+
+    public void setResultStatus(String resultStatus) {
+        this.resultStatus = resultStatus;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public String getRequestId() {
+        return requestId;
+    }
+
+    public void setRequestId(String requestId) {
+        this.requestId = requestId;
+    }
+
+    public String getIteration() {
+        return iteration;
+    }
+
+    public void setIteration(String iteration) {
+        this.iteration = iteration;
+    }
+
+    public String getDataJson() {
+        return dataJson;
+    }
+
+    public void setDataJson(String dataJson) {
+        this.dataJson = dataJson;
     }
 }

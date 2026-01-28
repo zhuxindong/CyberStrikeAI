@@ -1,17 +1,17 @@
 package com.cyberstrike.controller;
 
+import com.cyberstrike.dto.MessageDto;
 import com.cyberstrike.entity.Conversation;
 import com.cyberstrike.entity.Message;
 import com.cyberstrike.repository.ConversationRepository;
 import com.cyberstrike.repository.MessageRepository;
+import org.springframework.beans.BeanUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/conversations")
@@ -64,11 +64,58 @@ public class ConversationController {
     public ResponseEntity<?> getConversation(@PathVariable String id) {
         return conversationRepository.findById(id)
                 .map(conversation -> {
+                    // 1. 查询并排序
                     List<Message> messages = messageRepository.findByConversationIdOrderByCreatedAtAsc(id);
-                    Map<String, Object> result = new HashMap<>();
-                    result.put("conversation", conversation);
-                    result.put("messages", messages);
-                    return ResponseEntity.ok(result);
+
+                    // 2. 建立 ID -> DTO 映射 (DTO里包含初始化的List)
+                    Map<String, MessageDto> dtoMap = messages.stream()
+                            .collect(Collectors.toMap(
+                                    Message::getId,
+                                    msg -> {
+                                        MessageDto dto = new MessageDto();
+                                        BeanUtils.copyProperties(msg, dto);
+                                        dto.setMessageList(new ArrayList<>()); // 强制初始化
+                                        return dto;
+                                    }
+                            ));
+
+                    // 3. 核心修复：建立 用户ID -> 总结DTO 的映射
+                    // 因为分析和总结都关联到同一个用户ID，我们需要通过用户ID把它们联系起来
+                    Map<String, MessageDto> userToSummaryMap = new HashMap<>();
+                    for (Message msg : messages) {
+                        if ("result".equals(msg.getType())||"cancelled".equals(msg.getType())) {
+                            // 总结消息：记录 "它的requestId（用户ID）" 对应的 DTO 是谁
+                            userToSummaryMap.put(msg.getRequestId(), dtoMap.get(msg.getId()));
+                        }
+                    }
+
+                    // 4. 填充数据：遍历所有消息
+                    List<MessageDto> result = new ArrayList<>();
+                    for (Message msg : messages) {
+                        MessageDto dto = dtoMap.get(msg.getId());
+
+                        if ("result".equals(msg.getType())||"cancelled".equals(msg.getType())) {
+                            // 总结：加入结果集
+                            result.add(dto);
+                        } else if ("user".equals(msg.getType())) {
+                            // 用户：清空列表，加入结果集
+                            dto.setMessageList(null);
+                            result.add(dto);
+                        } else {
+                            // 分析：关键修复
+                            // 1. 获取该分析消息关联的 用户ID
+                            String userId = msg.getRequestId();
+                            // 2. 通过 userToSummaryMap 找到该用户对应的 总结DTO
+                            MessageDto summaryDto = userToSummaryMap.get(userId);
+                            if (summaryDto != null) {
+                                // 3. 把当前分析消息（实体）加入总结DTO的列表
+                                summaryDto.getMessageList().add(msg);
+                            }
+                            // 注意：分析消息不加入主列表
+                        }
+                    }
+
+                    return ResponseEntity.ok(Map.of("conversation", conversation, "messages", result));
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
