@@ -1,14 +1,31 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, onMounted } from 'vue';
+import { ref, nextTick, watch, onMounted, reactive, useTemplateRef } from 'vue';
 import { streamChat } from '../utils/chatService';
+import { escapeHtml } from '../utils/escape';
 import MarkdownIt from 'markdown-it';
 import 'element-plus/theme-chalk/display.css';
+import { formatDate } from '../utils/date';
 import { Promotion, Monitor, Loading, ChatLineRound, User, ArrowDown, Connection, Cpu, MagicStick, Box, Aim, ZoomIn, View, Cloudy, Check } from '@element-plus/icons-vue';
 import AttackChainView from './AttackChainView.vue';
 
 const md = new MarkdownIt();
 
+// 调用序列项
+interface TimelineItem {
+  id?: string;
+  type?: string;
+  mcpExecutionIds?: string;
+  functionName?: string;
+  iteration?: string;
+  title?: string;
+  content?: string;
+  createdAt?: string;
+  args?: string;
+  resultStatus?: string;
+}
+
 interface Message {
+  id?: string;
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   type?: string; 
@@ -16,6 +33,9 @@ interface Message {
   toolArgs?: string;
   toolResult?: string;
   timestamp: number;
+  timelineItems?: TimelineItem[]; // 调用序列
+  expanded?: boolean; // 时间轴是否展开
+  mcpCalls?: any[];
 }
 
 const props = defineProps<{
@@ -23,12 +43,15 @@ const props = defineProps<{
 }>();
 
 const input = ref('');
-const messages = ref<Message[]>([]);
+let messages = reactive<Message[]>([]);
 const loading = ref(false);
 const currentConversationId = ref<string | undefined>(props.conversationId);
 const currentTaskId = ref<string | undefined>(undefined);
+const progressTitle = ref<string>('');
 const messagesContainer = ref<HTMLElement | null>(null);
 const showAttackChain = ref(false);
+const mcpCallDialogVisible = ref<boolean>(false);
+const mcpCallDetail = ref<any>(undefined);
 
 // Role Management
 const roleIcons: Record<string, any> = {
@@ -77,12 +100,31 @@ const loadConversationHistory = async (conversationId: string) => {
     const response = await fetch(`/api/conversations/${conversationId}`);
     if (response.ok) {
       const data = await response.json();
-      if (data.messages && Array.isArray(data.messages)) {
-        messages.value = data.messages.map((msg: any) => ({
-          role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
-          content: msg.content || '',
-          timestamp: new Date(msg.createdAt).getTime()
-        }));
+      const results = data.messages;
+      if (results && Array.isArray(results)) {
+        messages.splice(0);
+        results.forEach((msg: any) => {
+          const item: Message = {
+            id: msg.id,
+            role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
+            content: msg.content || '',
+            timestamp: new Date(msg.createdAt).getTime()
+          };
+          if (msg.role === 'assistant') {
+            item.timelineItems = msg.messageList.map(item => {
+              item.title = getTitleByType(item.type, item);
+              item.createdAt = formatDate(item.createdAt);
+              item.args = item.dataJson ? JSON.parse(item.dataJson).arguments : '';
+              return item;
+            });
+            item.mcpCalls = item.timelineItems.filter(item => item.type === 'tool_call').map(item => ({
+              id: item.id,
+              toolName: item.functionName
+            }));
+            item.expanded = false;
+          }
+          messages.push(item);
+        });
         await scrollToBottom();
       }
     }
@@ -95,7 +137,7 @@ const loadConversationHistory = async (conversationId: string) => {
 
 // 监听 prop 变化，加载历史消息
 watch(() => props.conversationId, async (newId) => {
-  messages.value = [];
+  messages.splice(0);
   if(newId) {
     currentConversationId.value = newId;
     await loadConversationHistory(newId);
@@ -113,6 +155,31 @@ const scrollToBottom = async () => {
   }
 };
 
+const getTitleByType = (type: string, params: any) => {
+  let title = '';
+  if (type === 'tool_calls_detected' || type === 'progress') {
+    title = params.content;
+  } else if (type === 'tool_call') {
+    const toolName = params.mcpExecutionIds || params.toolName || '未知工具';
+    title = `🔧 调用工具: ${ escapeHtml(toolName) }`
+  } else if (type === 'tool_result') {
+    const resultToolName = params.mcpExecutionIds || params.toolName ||  '未知工具';
+    const success = params.resultStatus === 'success';
+    const statusIcon = success ? '✅' : '❌';
+    title = `${ statusIcon } 工具 ${ escapeHtml(resultToolName)} 执行${success ? '完成' : '失败' }`
+  } else if (type === 'iteration') {
+    title = `正在进行第${params.iteration}轮迭代`;
+  } else if (type === 'cancelled') {
+    title = '⛔ 任务已取消';
+  } else if (type === 'thinking') {
+    title = '🤔 AI思考';
+  } else if (type === 'error') {
+    title = '❌ 错误';
+  }
+
+  return title;
+}
+
 const sendMessage = async () => {
   if (!input.value.trim() || loading.value) return;
 
@@ -121,90 +188,129 @@ const sendMessage = async () => {
   loading.value = true;
 
   // Add user message
-  messages.value.push({
+  messages.push({
     role: 'user',
     content: userMsg,
     timestamp: Date.now()
+  });
+  
+  messages.push({
+    role: 'assistant',
+    timestamp: Date.now(),
+    content: '',
+    timelineItems: []
   });
   await scrollToBottom();
 
   // Initial assistant placeholder tracking
   streamChat(userMsg, {
     onMessage: (content, type, data) => {
+      // 最近的一条消息
+      const lastMessage: Message = messages[messages.length - 1];
+      lastMessage.expanded = true;
+      const title = getTitleByType(type, data);
+      const createdAt = formatDate(new Date());
       // 保存任务ID
-      if (typeof data === 'string') {
-        data = JSON.parse(data);
-      }
       if (type === 'task_started' && data?.taskId) {
         currentTaskId.value = data.taskId;
         if (data.conversationId) {
           currentConversationId.value = data.conversationId;
         }
       } else if (type === 'conversation') {
-        if (data && data.conversationId) {
+        if (data && data.taskId && data.conversationId) {
+          currentTaskId.value = data.taskId;
           currentConversationId.value = data.conversationId;
+          progressTitle.value = '🔍 渗透测试进行中...';
         }
+      } else if (type === 'iteration') {
+        lastMessage.timelineItems.push({
+          type,
+          createdAt,
+          title,
+          content
+        });
       } else if (type === 'cancelled') {
-        messages.value.push({
-          role: 'system',
-          content: '任务已取消',
-          timestamp: Date.now()
+        lastMessage.timelineItems.push({
+          type,
+          createdAt,
+          title,
+          content
         });
         loading.value = false;
         currentTaskId.value = undefined;
-        scrollToBottom();
-      } else if (type === 'thinking' || type === 'response') {
-        const lastMsg = messages.value[messages.value.length - 1];
-        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.type === type) {
-            // Append if same type and role
-            messages.value[messages.value.length - 1].content = content;
-        } else {
-            messages.value.push({
-              role: 'assistant',
-              content: content,
-              type: type,
-              timestamp: Date.now()
-            });
-        }
-        scrollToBottom();
+        progressTitle.value = '⛔ 任务已取消';
+      } else if (type === 'progress') {
+        progressTitle.value = content;
+      } else if (type === 'thinking') {
+        lastMessage.timelineItems.push({
+          type,
+          createdAt,
+          title,
+          content
+        });
+      } else if (type === 'tool_calls_detected') {
+        lastMessage.timelineItems.push({
+          type,
+          createdAt,
+          title,
+          content
+        });
       } else if (type === 'tool_call') {
-        messages.value.push({
-          role: 'tool',
-          content: `Calling Tool: ${data?.toolName}`,
-          toolName: data?.toolName,
-          toolArgs: data?.arguments ? JSON.stringify(data.arguments, null, 2) : '',
-          timestamp: Date.now()
+        lastMessage.timelineItems.push({
+          type,
+          createdAt,
+          title,
+          content,
+          args: data.arguments
         });
-        scrollToBottom();
       } else if (type === 'tool_result') {
-         messages.value.push({
-            role: 'tool',
-            content: content,
-            toolResult: content,
-            timestamp: Date.now()
-         });
-         scrollToBottom();
-      } else if (type === 'error') {
-        messages.value.push({
-          role: 'system',
-          content: `Error: ${content}`,
-          timestamp: Date.now()
+        lastMessage.timelineItems.push({
+          id: data.executionId,
+          type,
+          createdAt,
+          title,
+          content
         });
+      } else if (type === 'error') {
+        lastMessage.timelineItems.push({
+          type,
+          createdAt,
+          title,
+          content
+        });
+        loading.value = false;
+        progressTitle.value = '❌ 执行失败';
       }
+      scrollToBottom();
     },
     onError: (err) => {
       console.error(err);
-      messages.value.push({
-        role: 'system',
-        content: "Connection error: " + err.message,
-        timestamp: Date.now()
-      });
+      const lastMessage: Message = messages[messages.length - 1];
+      const timelineItems: TimelineItem[] = lastMessage.timelineItems;
+      lastMessage.content = timelineItems[timelineItems.length - 1].content;
+      // lastMessage.timelineItems.push({
+      //   type: 'error',
+      //   createdAt,
+      //   title: '❌ 错误',
+      //   content: `Connection error: ${err}`
+      // });
       loading.value = false;
+      progressTitle.value = '❌ 执行失败';
       scrollToBottom();
     },
     onDone: () => {
+      const lastMessage: Message = messages[messages.length - 1];
+      const timelineItems: TimelineItem[] = lastMessage.timelineItems;
+      lastMessage.content = timelineItems[timelineItems.length - 1].content;
+      lastMessage.mcpCalls = timelineItems.filter(item => item.type === 'tool_call').map(item => ({
+        id: item.id,
+        toolName: item.functionName
+      }));
+      toggleTimeline(lastMessage);
+      
       loading.value = false;
       currentTaskId.value = undefined;
+      progressTitle.value = '✅ 渗透测试完成';
       scrollToBottom();
     }
   }, currentConversationId.value, selectedRole.value?.name);
@@ -224,6 +330,42 @@ const stopTask = async () => {
   }
 };
 
+const toggleTimeline = (message: Message) => {
+  message.expanded = !message.expanded;
+  nextTick(() => {
+    // const timelines = useTemplateRef("timelines");
+    // console.log(timelines);
+  });
+};
+
+const showMcpCall = (messageId: string, id: string) => {
+  mcpCallDialogVisible.value = true;
+  const message = messages.find(mes => mes.id === messageId);
+  if (message) {
+    const i = message.timelineItems.findIndex(item => item.id === id);
+    if (i !== -1) {
+      const call = message.timelineItems[i];
+      const result = message.timelineItems[i + 1];
+      let parsedContent: string;
+      try {
+        parsedContent = JSON.stringify(JSON.parse(result.content), null, 2);
+      } catch (error) {
+        console.log(error);
+        parsedContent = result.content;
+      }
+      mcpCallDetail.value = {
+        id: call.id,
+        createdAt: call.createdAt,
+        args: call.args,
+        resultStatus: result.resultStatus,
+        mcpExecutionIds: call.mcpExecutionIds,
+        content: result.content,
+        parsedContent
+      };
+    }
+  }
+};
+
 const renderMarkdown = (text: string) => {
   return md.render(text || '');
 };
@@ -238,23 +380,75 @@ const renderMarkdown = (text: string) => {
         <p>Enter a target or command to start the investigation.</p>
       </div>
       
-      <div v-for="(msg, index) in messages" :key="index" class="message-row" :class="msg.role">
-        <div class="message-bubble">
-          <div class="message-header">
-            <span class="role-badge">
-              {{ msg.role.toUpperCase() }} {{ msg.type ? `(${msg.type})` : '' }}
-            </span>
-            <span class="time">{{ new Date(msg.timestamp).toLocaleTimeString() }}</span>
+      <div v-for="(msg, index) in messages" :key="index" :class="['message-row', msg.role]">
+        <div class="message-container">
+          <div class="message-bubble">
+            <div class="message-header">
+              <span class="role-badge">
+                {{ msg.role.toUpperCase() }} {{ msg.type ? `(${msg.type})` : '' }}
+              </span>
+              <span class="time">{{ new Date(msg.timestamp).toLocaleTimeString() }}</span>
+            </div>
+            
+            <!-- <div v-if="msg.role === 'tool'" class="tool-content">
+              <div v-if="msg.toolName"><strong>Tool:</strong> {{ msg.toolName }}</div>
+              <pre v-if="msg.toolArgs" class="code-block">{{ msg.toolArgs }}</pre>
+              <pre v-if="msg.toolResult" class="result-block">{{ msg.toolResult }}</pre>
+              <div v-if="!msg.toolName && !msg.toolResult">{{ msg.content }}</div>
+            </div> -->
+            
+            <div class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
           </div>
-          
-          <div v-if="msg.role === 'tool'" class="tool-content">
-             <div v-if="msg.toolName"><strong>Tool:</strong> {{ msg.toolName }}</div>
-             <pre v-if="msg.toolArgs" class="code-block">{{ msg.toolArgs }}</pre>
-             <pre v-if="msg.toolResult" class="result-block">{{ msg.toolResult }}</pre>
-             <div v-if="!msg.toolName && !msg.toolResult">{{ msg.content }}</div>
-          </div>
-          
-          <div v-else class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
+          <template v-if="msg.role === 'assistant'">
+            <!-- 任务进行中 -->
+            <div v-if="loading && index === messages.length - 1" class="progress-header">
+              <span class="progress-title">{{ progressTitle }}</span>
+              <div class="progress-actions">
+                  <el-button type="danger" class="progress-stop" @click="stopTask">停止任务</el-button>
+                  <el-button @click="toggleTimeline(msg)">{{ msg.expanded ? '收起详情' : '展开详情'}}</el-button>
+              </div>
+            </div>
+            <!-- 任务结束 -->
+            <div v-else class="mcp-call-section">
+              <span class="mcp-call-label">📋 渗透测试详情</span>
+              <div class="mcp-call-buttons">
+                <el-button type="info" size="small" v-for="item in msg.mcpCalls" :key="item.id" @click="showMcpCall(msg.id, item.id)">{{ item.toolName }}</el-button>
+                <el-button :type="msg.expanded ? '' : 'primary'" size="small" @click="toggleTimeline(msg)">{{ msg.expanded ? '收起详情' : '展开详情'}}</el-button>
+              </div>
+            </div>
+            <!-- 调用序列 -->
+            <div v-show="msg.timelineItems?.length" :class="['progress-timeline', { 'expanded': msg.expanded }]">
+              <div v-for="({ id, createdAt, title, type, content, args }) in msg.timelineItems"
+                :key="createdAt"
+                :class="['timeline-item', `timeline-item-${type}`]">
+                <div class="timeline-item-header">
+                  <span class="timeline-item-time">{{ createdAt }}</span>
+                  <span class="timeline-item-title">{{ title }}</span>
+                </div>
+                <div class="timeline-item-content">
+                  <div v-if="type === 'tool_call'" class="tool-section">
+                    <div class="tool-details">
+                      <div class="tool-arg-section">
+                        <strong>参数:</strong>
+                        <pre class="tool-args">{{ escapeHtml(JSON.stringify(args, null, 2)) }}</pre>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else-if="type === 'tool_result'" class="tool-section">
+                    <strong>执行结果:</strong>
+                    <pre class="tool-result">{{ escapeHtml(content) }}</pre>
+                    <div v-if="id" class="tool-execution-id">
+                      执行ID: <code>{{ escapeHtml(id) }}</code>
+                    </div>
+                  </div>
+                  <span v-else-if="type === 'cancelled'">
+                    {{ content || '任务已取消' }}
+                  </span>
+                  <span v-else>{{ content }}</span>
+                </div>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
       
@@ -343,14 +537,66 @@ const renderMarkdown = (text: string) => {
       :visible="showAttackChain"
       @close="showAttackChain = false"
     />
+    <el-dialog title="工具调用详情" v-model="mcpCallDialogVisible">
+      <div class="detail-section detail-section-overview">
+        <div class="detail-section-header">
+            <h3>执行信息</h3>
+        </div>
+        <div class="detail-info-grid">
+          <div class="detail-item">
+              <strong>工具</strong>
+              <span>{{ mcpCallDetail.mcpExecutionIds }}</span>
+          </div>
+          <div class="detail-item">
+              <strong>状态</strong>
+              <span class="status-chip status-unknown">{{ mcpCallDetail.resultStatus }}</span>
+          </div>
+          <div class="detail-item">
+              <strong>时间</strong>
+              <span id="detail-time">{{ mcpCallDetail.createdAt }}</span>
+          </div>
+          <div class="detail-item">
+              <strong>执行 ID</strong>
+              <span id="detail-execution-id" class="mono-text">{{ mcpCallDetail.id }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-header">
+          <h3>请求参数</h3>
+          <el-button size="small" type="primary" onclick="copyDetailBlock('detail-request', this)">复制 JSON</el-button>
+        </div>
+        <div class="detail-code-card">
+          <pre id="detail-request" class="code-block">{{ JSON.stringify(mcpCallDetail.args, null, 2) }}</pre>
+        </div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-header">
+          <h3>响应结果</h3>
+          <el-button size="small" type="primary" onclick="copyDetailBlock('detail-response', this)">复制内容</el-button>
+        </div>
+        <div class="detail-code-card">
+          <pre id="detail-response" class="code-block">{{ mcpCallDetail.content }}</pre>
+        </div>
+      </div>
+      <div :class="['detail-section', `detail-${ mcpCallDetail.resultStatus }-wrapper`]">
+        <div class="detail-section-header">
+          <h3>{{ mcpCallDetail.resultStatus === 'success' ? '成功' : '失败' }}信息</h3>
+          <el-button size="small" type="primary" onclick="copyDetailBlock('detail-success', this)">复制内容</el-button>
+        </div>
+        <div class="detail-code-card">
+          <pre id="detail-success" class="code-block">{{ mcpCallDetail.parsedContent }}</pre>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
-<style scoped>
+<style lang="scss" scoped>
 .chat-container {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 100px);
+  height: calc(100vh - 94px);
   max-width: 1200px;
   margin: 0 auto;
   border: 1px solid var(--el-border-color);
@@ -363,6 +609,7 @@ const renderMarkdown = (text: string) => {
   overflow-y: auto;
   padding: 20px;
   scroll-behavior: smooth;
+  background-color: #f5f7fa;
 }
 
 .empty-state {
@@ -371,37 +618,56 @@ const renderMarkdown = (text: string) => {
   color: var(--el-text-color-secondary);
 }
 
+.message-bubble {
+  padding: 12px 16px;
+  border-radius: 8px;
+  word-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.6;
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+  overflow-y: visible;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
+}
+
 .message-row {
   display: flex;
-  margin-bottom: 15px;
-}
-
-.message-row.user {
-  justify-content: flex-end;
-}
-
-.message-row.assistant, .message-row.tool, .message-row.system {
   justify-content: flex-start;
-}
 
-.message-bubble {
-  max-width: 85%;
-  padding: 10px 15px;
-  border-radius: 8px;
-  background-color: var(--el-bg-color-overlay);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-}
+  >.message-container {
+    margin-bottom: 15px;
+    max-width: 100%;
+  }
 
-.message-row.user .message-bubble {
-  background-color: var(--el-color-primary);
-  color: white;
-}
+  &.user {
+    justify-content: flex-end;
 
-.message-row.tool .message-bubble {
-  background-color: #1e1e1e;
-  color: #d4d4d4;
-  font-family: monospace;
-  width: 95%;
+    .message-bubble {
+      background-color: var(--el-color-primary);
+      color: white;
+    }
+  }
+
+  &.assistant {
+    .message-bubble {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-bottom-left-radius: 8px;
+      border-top-left-radius: 2px;
+    }
+  }
+
+  &.tool {
+    .message-bubble  {
+      background-color: #1e1e1e;
+      color: #d4d4d4;
+      font-family: monospace;
+      width: 95%;
+    }
+  }
 }
 
 .message-header {
@@ -410,6 +676,254 @@ const renderMarkdown = (text: string) => {
   opacity: 0.7;
   display: flex;
   justify-content: space-between;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 12px 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+
+  .progress-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.9375rem;
+  }
+
+  .progress-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .progress-stop {
+    padding: 4px 12px;
+    background: rgba(220, 53, 69, 0.1);
+    border: 1px solid rgba(220, 53, 69, 0.4);
+    border-radius: 4px;
+    font-size: 0.8125rem;
+    color: var(--error-color);
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover {
+      background: rgba(220, 53, 69, 0.15);
+      border-color: var(--error-color);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.mcp-call-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+  width: 100%;
+
+  .mcp-call-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+
+    &::before {
+      content: '';
+      width: 4px;
+      height: 4px;
+      background: var(--accent-color);
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+  }
+
+  .mcp-call-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}
+
+.progress-timeline {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  opacity: 0;
+
+  &.expanded {
+    max-height: 2000px;
+    overflow-y: auto;
+    opacity: 1;
+    margin-top: 12px;
+  }
+
+  .timeline-item-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .timeline-item-time {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-family: monospace;
+    min-width: 70px;
+  }
+
+  .timeline-item-title {
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    flex: 1;
+  }
+
+  .timeline-item-content {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  .timeline-item {
+    padding: 12px;
+    margin-bottom: 8px;
+    border-left: 3px solid var(--border-color);
+    padding-left: 16px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    transition: all 0.2s;
+    &:hover {
+      background: var(--bg-tertiary);
+    }
+  }
+
+  .timeline-item-iteration {
+    border-left-color: var(--accent-color);
+    background: rgba(0, 102, 255, 0.05);
+  }
+
+  .timeline-item-thinking {
+    border-left-color: #9c27b0;
+    background: rgba(156, 39, 176, 0.05);
+  }
+
+  .timeline-item-tool_call {
+    border-left-color: #ff9800;
+    background: rgba(255, 152, 0, 0.05);
+  }
+
+  .timeline-item-tool_result {
+    border-left-color: var(--success-color);
+    background: rgba(40, 167, 69, 0.05);
+    &.error {
+      border-left-color: var(--error-color);
+      background: rgba(220, 53, 69, 0.05);
+    }
+  }
+
+  .timeline-item-error {
+    border-left-color: var(--error-color);
+    background: rgba(220, 53, 69, 0.1);
+  }
+
+  .timeline-item-cancelled {
+    border-left-color: #ff7043;
+    background: rgba(255, 112, 67, 0.12);
+  }
+
+  .tool-details {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .tool-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    strong {
+      color: var(--text-primary);
+      font-size: 0.8125rem;
+    }
+
+    &.error {
+      .tool-result {
+        background: rgba(220, 53, 69, 0.1);
+        border-color: var(--error-color);
+        color: var(--error-color);
+      }
+    }
+
+    &.success {
+      .tool-result {
+        background: rgba(40, 167, 69, 0.1);
+        border-color: var(--success-color);
+      }
+    }
+  }
+
+  .tool-args {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 12px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    overflow-x: auto;
+    margin: 0;
+    color: var(--text-primary);
+  }
+
+  .tool-result {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 12px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    overflow-x: auto;
+    max-height: 400px;
+    overflow-y: auto;
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    color: var(--text-primary);
+  }
+
+  .tool-execution-id {
+    margin-top: 8px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  text-transform: none;
 }
 
 .code-block {
@@ -496,6 +1010,73 @@ const renderMarkdown = (text: string) => {
 
 .chat-input {
     flex: 1;
+}
+
+.detail-section {
+  margin-bottom: 20px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+
+  .detail-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .detail-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+
+    .detail-item {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 12px 14px;
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 0;
+
+      strong {
+        color: var(--text-secondary);
+        font-weight: 600;
+        font-size: 0.75rem;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+      }
+
+      span {
+        color: var(--text-primary);
+        font-size: 0.95rem;
+        font-weight: 600;
+        word-break: break-word;
+      }
+    }
+  }
+}
+
+.detail-section-overview {
+  background: linear-gradient(135deg, rgba(0, 102, 255, 0.07), rgba(0, 102, 255, 0.02));
+  border-color: rgba(0, 102, 255, 0.2);
 }
 </style>
 

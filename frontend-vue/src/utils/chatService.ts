@@ -46,7 +46,8 @@ export async function streamChat(
 
             for (const line of lines) {
                 if (line.startsWith("data:")) {
-                    const jsonStr = line.substring(5).trim();
+                    let jsonStr = line.substring(5).trim();
+                    jsonStr = jsonStr.replace(/\n/g, '\\n');
                     if (jsonStr) {
                         try {
                             const event = JSON.parse(jsonStr);
