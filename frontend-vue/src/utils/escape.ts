@@ -1,5 +1,5 @@
-export function escapeHtml(text: string) {
+export function escapeHtml(text: string | undefined) {
     const div = document.createElement('div');
-    div.textContent = text;
+    div.textContent = text || '';
     return div.innerHTML;
 }

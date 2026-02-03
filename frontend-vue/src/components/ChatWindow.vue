@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, onMounted, reactive, useTemplateRef } from 'vue';
+import { ref, nextTick, watch, onMounted, reactive } from 'vue';
 import { streamChat } from '../utils/chatService';
 import { escapeHtml } from '../utils/escape';
+import { formatDate } from '../utils/date';
 import MarkdownIt from 'markdown-it';
 import 'element-plus/theme-chalk/display.css';
-import { formatDate } from '../utils/date';
-import { Promotion, Monitor, Loading, ChatLineRound, User, ArrowDown, Connection, Cpu, MagicStick, Box, Aim, ZoomIn, View, Cloudy, Check } from '@element-plus/icons-vue';
+import { Monitor, Loading, User, ArrowDown, Cpu, MagicStick, Box, Aim, ZoomIn, View, Cloudy, Check } from '@element-plus/icons-vue';
 import AttackChainView from './AttackChainView.vue';
+import McpCallDialog from "./McpCallDialog.vue";
 
 const md = new MarkdownIt();
 
@@ -26,8 +27,8 @@ interface TimelineItem {
 
 interface Message {
   id?: string;
-  role: 'user' | 'assistant' | 'system' | 'tool';
-  content: string;
+  role: 'user' | 'assistant' | 'system';
+  content?: string;
   type?: string; 
   toolName?: string;
   toolArgs?: string;
@@ -51,7 +52,7 @@ const progressTitle = ref<string>('');
 const messagesContainer = ref<HTMLElement | null>(null);
 const showAttackChain = ref(false);
 const mcpCallDialogVisible = ref<boolean>(false);
-const mcpCallDetail = ref<any>(undefined);
+const mcpCallDetail = ref<any>({});
 
 // Role Management
 const roleIcons: Record<string, any> = {
@@ -106,21 +107,18 @@ const loadConversationHistory = async (conversationId: string) => {
         results.forEach((msg: any) => {
           const item: Message = {
             id: msg.id,
-            role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
+            role: msg.role,
             content: msg.content || '',
             timestamp: new Date(msg.createdAt).getTime()
           };
           if (msg.role === 'assistant') {
-            item.timelineItems = msg.messageList.map(item => {
+            item.timelineItems = msg.messageList.map((item: any) => {
               item.title = getTitleByType(item.type, item);
               item.createdAt = formatDate(item.createdAt);
               item.args = item.dataJson ? JSON.parse(item.dataJson).arguments : '';
               return item;
             });
-            item.mcpCalls = item.timelineItems.filter(item => item.type === 'tool_call').map(item => ({
-              id: item.id,
-              toolName: item.functionName
-            }));
+            generateMCPCalls(item);
             item.expanded = false;
           }
           messages.push(item);
@@ -155,10 +153,10 @@ const scrollToBottom = async () => {
   }
 };
 
-const getTitleByType = (type: string, params: any) => {
+const getTitleByType = (type: string, params: any, content?: string) => {
   let title = '';
   if (type === 'tool_calls_detected' || type === 'progress') {
-    title = params.content;
+    title = content || params.content || '';
   } else if (type === 'tool_call') {
     const toolName = params.mcpExecutionIds || params.toolName || '未知工具';
     title = `🔧 调用工具: ${ escapeHtml(toolName) }`
@@ -180,6 +178,15 @@ const getTitleByType = (type: string, params: any) => {
   return title;
 }
 
+// 生成调用序列
+const generateMCPCalls = (message: Message) => {
+  const timelineItems: TimelineItem[] = message.timelineItems || [];
+  message.mcpCalls = timelineItems.filter(item => item.type === 'tool_call').map(item => ({
+    id: item.id,
+    toolName: item.functionName
+  }));
+};
+
 const sendMessage = async () => {
   if (!input.value.trim() || loading.value) return;
 
@@ -200,26 +207,31 @@ const sendMessage = async () => {
     content: '',
     timelineItems: []
   });
+
   await scrollToBottom();
 
+  let streamingConversatinoId: string | undefined = currentConversationId.value;
   // Initial assistant placeholder tracking
   streamChat(userMsg, {
     onMessage: (content, type, data) => {
+      // 流式输出的对话Id和当前对话Id不一致时，不会输出对话
+      if (currentConversationId.value !== streamingConversatinoId) {
+        return;
+      }
       // 最近的一条消息
       const lastMessage: Message = messages[messages.length - 1];
       lastMessage.expanded = true;
-      const title = getTitleByType(type, data);
+      lastMessage.timelineItems = lastMessage.timelineItems || [];
+      const title = getTitleByType(type, data, content);
       const createdAt = formatDate(new Date());
       // 保存任务ID
       if (type === 'task_started' && data?.taskId) {
         currentTaskId.value = data.taskId;
-        if (data.conversationId) {
-          currentConversationId.value = data.conversationId;
-        }
+        streamingConversatinoId = data.conversationId;
       } else if (type === 'conversation') {
         if (data && data.taskId && data.conversationId) {
           currentTaskId.value = data.taskId;
-          currentConversationId.value = data.conversationId;
+          streamingConversatinoId = data.conversationId;
           progressTitle.value = '🔍 渗透测试进行中...';
         }
       } else if (type === 'iteration') {
@@ -239,6 +251,7 @@ const sendMessage = async () => {
         loading.value = false;
         currentTaskId.value = undefined;
         progressTitle.value = '⛔ 任务已取消';
+        toggleTimeline(lastMessage);
       } else if (type === 'progress') {
         progressTitle.value = content;
       } else if (type === 'thinking') {
@@ -261,6 +274,7 @@ const sendMessage = async () => {
           createdAt,
           title,
           content,
+          functionName: data.toolName,
           args: data.arguments
         });
       } else if (type === 'tool_result') {
@@ -284,28 +298,25 @@ const sendMessage = async () => {
       scrollToBottom();
     },
     onError: (err) => {
+      if (currentConversationId.value !== streamingConversatinoId) {
+        return;
+      }
       console.error(err);
       const lastMessage: Message = messages[messages.length - 1];
-      const timelineItems: TimelineItem[] = lastMessage.timelineItems;
+      const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
       lastMessage.content = timelineItems[timelineItems.length - 1].content;
-      // lastMessage.timelineItems.push({
-      //   type: 'error',
-      //   createdAt,
-      //   title: '❌ 错误',
-      //   content: `Connection error: ${err}`
-      // });
       loading.value = false;
       progressTitle.value = '❌ 执行失败';
       scrollToBottom();
     },
     onDone: () => {
+      if (currentConversationId.value !== streamingConversatinoId) {
+        return;
+      }
       const lastMessage: Message = messages[messages.length - 1];
-      const timelineItems: TimelineItem[] = lastMessage.timelineItems;
+      const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
       lastMessage.content = timelineItems[timelineItems.length - 1].content;
-      lastMessage.mcpCalls = timelineItems.filter(item => item.type === 'tool_call').map(item => ({
-        id: item.id,
-        toolName: item.functionName
-      }));
+      generateMCPCalls(lastMessage);
       toggleTimeline(lastMessage);
       
       loading.value = false;
@@ -330,28 +341,25 @@ const stopTask = async () => {
   }
 };
 
+// 展开/收起调用序列
 const toggleTimeline = (message: Message) => {
   message.expanded = !message.expanded;
-  nextTick(() => {
-    // const timelines = useTemplateRef("timelines");
-    // console.log(timelines);
-  });
 };
 
-const showMcpCall = (messageId: string, id: string) => {
+const showMcpCall = (messageId: string | undefined, id: string) => {
   mcpCallDialogVisible.value = true;
   const message = messages.find(mes => mes.id === messageId);
   if (message) {
-    const i = message.timelineItems.findIndex(item => item.id === id);
+    const timelineItems = message.timelineItems || [];
+    const i = timelineItems.findIndex(item => item.id === id);
     if (i !== -1) {
-      const call = message.timelineItems[i];
-      const result = message.timelineItems[i + 1];
+      const call = timelineItems[i];
+      const result = timelineItems[i + 1];
       let parsedContent: string;
       try {
-        parsedContent = JSON.stringify(JSON.parse(result.content), null, 2);
+        parsedContent = JSON.stringify(JSON.parse(result.content || ''), null, 2);
       } catch (error) {
-        console.log(error);
-        parsedContent = result.content;
+        parsedContent = result.content || '';
       }
       mcpCallDetail.value = {
         id: call.id,
@@ -366,7 +374,7 @@ const showMcpCall = (messageId: string, id: string) => {
   }
 };
 
-const renderMarkdown = (text: string) => {
+const renderMarkdown = (text: string | undefined) => {
   return md.render(text || '');
 };
 </script>
@@ -389,14 +397,6 @@ const renderMarkdown = (text: string) => {
               </span>
               <span class="time">{{ new Date(msg.timestamp).toLocaleTimeString() }}</span>
             </div>
-            
-            <!-- <div v-if="msg.role === 'tool'" class="tool-content">
-              <div v-if="msg.toolName"><strong>Tool:</strong> {{ msg.toolName }}</div>
-              <pre v-if="msg.toolArgs" class="code-block">{{ msg.toolArgs }}</pre>
-              <pre v-if="msg.toolResult" class="result-block">{{ msg.toolResult }}</pre>
-              <div v-if="!msg.toolName && !msg.toolResult">{{ msg.content }}</div>
-            </div> -->
-            
             <div class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
           </div>
           <template v-if="msg.role === 'assistant'">
@@ -412,14 +412,14 @@ const renderMarkdown = (text: string) => {
             <div v-else class="mcp-call-section">
               <span class="mcp-call-label">📋 渗透测试详情</span>
               <div class="mcp-call-buttons">
-                <el-button type="info" size="small" v-for="item in msg.mcpCalls" :key="item.id" @click="showMcpCall(msg.id, item.id)">{{ item.toolName }}</el-button>
+                <el-button size="small" v-for="item in msg.mcpCalls" :key="item.id" @click="showMcpCall(msg.id, item.id)">{{ item.toolName }}</el-button>
                 <el-button :type="msg.expanded ? '' : 'primary'" size="small" @click="toggleTimeline(msg)">{{ msg.expanded ? '收起详情' : '展开详情'}}</el-button>
               </div>
             </div>
             <!-- 调用序列 -->
             <div v-show="msg.timelineItems?.length" :class="['progress-timeline', { 'expanded': msg.expanded }]">
               <div v-for="({ id, createdAt, title, type, content, args }) in msg.timelineItems"
-                :key="createdAt"
+                :key="id"
                 :class="['timeline-item', `timeline-item-${type}`]">
                 <div class="timeline-item-header">
                   <span class="timeline-item-time">{{ createdAt }}</span>
@@ -436,7 +436,7 @@ const renderMarkdown = (text: string) => {
                   </div>
                   <div v-else-if="type === 'tool_result'" class="tool-section">
                     <strong>执行结果:</strong>
-                    <pre class="tool-result">{{ escapeHtml(content) }}</pre>
+                    <pre class="tool-result">{{ escapeHtml(content || '') }}</pre>
                     <div v-if="id" class="tool-execution-id">
                       执行ID: <code>{{ escapeHtml(id) }}</code>
                     </div>
@@ -444,7 +444,7 @@ const renderMarkdown = (text: string) => {
                   <span v-else-if="type === 'cancelled'">
                     {{ content || '任务已取消' }}
                   </span>
-                  <span v-else>{{ content }}</span>
+                  <span v-else-if="type !== 'tool_calls_detected' && type !== 'progress'">{{ content }}</span>
                 </div>
               </div>
             </div>
@@ -462,7 +462,7 @@ const renderMarkdown = (text: string) => {
       <div class="role-selector-wrapper" v-if="!loading">
         <el-popover
           :visible="rolePopoverVisible"
-          @update:visible="val => rolePopoverVisible = val"
+          @update:visible="(val: boolean) => rolePopoverVisible = val"
           placement="top-start"
           :width="320"
           trigger="click"
@@ -537,58 +537,8 @@ const renderMarkdown = (text: string) => {
       :visible="showAttackChain"
       @close="showAttackChain = false"
     />
-    <el-dialog title="工具调用详情" v-model="mcpCallDialogVisible">
-      <div class="detail-section detail-section-overview">
-        <div class="detail-section-header">
-            <h3>执行信息</h3>
-        </div>
-        <div class="detail-info-grid">
-          <div class="detail-item">
-              <strong>工具</strong>
-              <span>{{ mcpCallDetail.mcpExecutionIds }}</span>
-          </div>
-          <div class="detail-item">
-              <strong>状态</strong>
-              <span class="status-chip status-unknown">{{ mcpCallDetail.resultStatus }}</span>
-          </div>
-          <div class="detail-item">
-              <strong>时间</strong>
-              <span id="detail-time">{{ mcpCallDetail.createdAt }}</span>
-          </div>
-          <div class="detail-item">
-              <strong>执行 ID</strong>
-              <span id="detail-execution-id" class="mono-text">{{ mcpCallDetail.id }}</span>
-          </div>
-        </div>
-      </div>
-      <div class="detail-section">
-        <div class="detail-section-header">
-          <h3>请求参数</h3>
-          <el-button size="small" type="primary" onclick="copyDetailBlock('detail-request', this)">复制 JSON</el-button>
-        </div>
-        <div class="detail-code-card">
-          <pre id="detail-request" class="code-block">{{ JSON.stringify(mcpCallDetail.args, null, 2) }}</pre>
-        </div>
-      </div>
-      <div class="detail-section">
-        <div class="detail-section-header">
-          <h3>响应结果</h3>
-          <el-button size="small" type="primary" onclick="copyDetailBlock('detail-response', this)">复制内容</el-button>
-        </div>
-        <div class="detail-code-card">
-          <pre id="detail-response" class="code-block">{{ mcpCallDetail.content }}</pre>
-        </div>
-      </div>
-      <div :class="['detail-section', `detail-${ mcpCallDetail.resultStatus }-wrapper`]">
-        <div class="detail-section-header">
-          <h3>{{ mcpCallDetail.resultStatus === 'success' ? '成功' : '失败' }}信息</h3>
-          <el-button size="small" type="primary" onclick="copyDetailBlock('detail-success', this)">复制内容</el-button>
-        </div>
-        <div class="detail-code-card">
-          <pre id="detail-success" class="code-block">{{ mcpCallDetail.parsedContent }}</pre>
-        </div>
-      </div>
-    </el-dialog>
+    <!-- 工具调用详情 -->
+    <McpCallDialog v-model:dialogVisible="mcpCallDialogVisible" :detail="mcpCallDetail" />
   </div>
 </template>
 
@@ -652,6 +602,7 @@ const renderMarkdown = (text: string) => {
 
   &.assistant {
     .message-bubble {
+      min-width: 500px;
       background: var(--bg-primary);
       color: var(--text-primary);
       border: 1px solid var(--border-color);
@@ -912,20 +863,6 @@ const renderMarkdown = (text: string) => {
   }
 }
 
-.status-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  border: 1px solid transparent;
-  text-transform: none;
-}
-
 .code-block {
   background: rgba(255,255,255,0.1);
   padding: 8px;
@@ -1010,73 +947,6 @@ const renderMarkdown = (text: string) => {
 
 .chat-input {
     flex: 1;
-}
-
-.detail-section {
-  margin-bottom: 20px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-  padding: 20px;
-  box-shadow: var(--shadow-sm);
-
-  &:last-child {
-    margin-bottom: 0;
-  }
-
-  .detail-section-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 16px;
-  }
-
-  h3 {
-    margin: 0;
-    color: var(--text-primary);
-    font-size: 1rem;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-  }
-
-  .detail-info-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 14px;
-
-    .detail-item {
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 12px 14px;
-      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      margin: 0;
-
-      strong {
-        color: var(--text-secondary);
-        font-weight: 600;
-        font-size: 0.75rem;
-        letter-spacing: 0.5px;
-        text-transform: uppercase;
-      }
-
-      span {
-        color: var(--text-primary);
-        font-size: 0.95rem;
-        font-weight: 600;
-        word-break: break-word;
-      }
-    }
-  }
-}
-
-.detail-section-overview {
-  background: linear-gradient(135deg, rgba(0, 102, 255, 0.07), rgba(0, 102, 255, 0.02));
-  border-color: rgba(0, 102, 255, 0.2);
 }
 </style>
 
@@ -1168,4 +1038,3 @@ const renderMarkdown = (text: string) => {
   color: var(--el-color-primary);
 }
 </style>
-
