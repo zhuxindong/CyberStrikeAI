@@ -1,19 +1,21 @@
 package com.cyberstrike.service;
 
 import com.cyberstrike.dto.ChatRequest;
+import com.cyberstrike.entity.ChatCompletionMessageDO;
 import com.cyberstrike.entity.Config;
 import com.cyberstrike.entity.Conversation;
 import com.cyberstrike.entity.Message;
+import com.cyberstrike.repository.ChatCompletionMessageRepository;
 import com.cyberstrike.repository.ConfigRepository;
 import com.cyberstrike.repository.ConversationRepository;
 import com.cyberstrike.repository.MessageRepository;
 import com.cyberstrike.service.openai.OpenAiService;
 import com.cyberstrike.service.openai.model.OpenAIModels.*;
 import com.cyberstrike.tool.ToolRegistry;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.annotation.PostConstruct;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -30,6 +32,7 @@ public class AgentService {
     private final OpenAiService openAiService;
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
+    private final ChatCompletionMessageRepository chatCompletionMessageRepository;
     private final ToolRegistry toolRegistry;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ConfigRepository configRepository;
@@ -40,13 +43,14 @@ public class AgentService {
     private static final int MAX_COMPLETED_TASKS = 50;
 
     public AgentService(OpenAiService openAiService,
-            ConversationRepository conversationRepository,
-            MessageRepository messageRepository,
-            ToolRegistry toolRegistry,
-            ConfigRepository configRepository) {
+                        ConversationRepository conversationRepository,
+                        MessageRepository messageRepository,
+                        ChatCompletionMessageRepository chatCompletionMessageRepository, ToolRegistry toolRegistry,
+                        ConfigRepository configRepository) {
         this.openAiService = openAiService;
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
+        this.chatCompletionMessageRepository = chatCompletionMessageRepository;
         this.toolRegistry = toolRegistry;
         this.configRepository = configRepository;
     }
@@ -154,18 +158,79 @@ public class AgentService {
         executor.submit(() -> {
             try {
 
-                // Save User Message (注意：这里传入了空字符串占位 functionName 和 resultStatus)
-                String id = saveMessage(conversationId, "user", "", request.getMessage(), "", "", "user","",null,null);
+                // --- 1. 加载历史消息 (重建上下文) ---
+                // 从数据库查出该会话的所有历史记录
+                List<ChatCompletionMessageDO> historyDOs = chatCompletionMessageRepository
+                        .findByConversationIdOrderByCreateTimeAscIdAsc(conversationId);
+
+                // Prepare Messages
+                List<ChatCompletionMessage> messages = new ArrayList<>();
+                List<ChatCompletionMessageDO> messageDOList = new ArrayList<>();
+                // 如果是新会话，添加系统提示词
+                if (historyDOs.isEmpty()) {
+                    ChatCompletionMessage systemMsg = ChatCompletionMessage.builder()
+                            .role("system").content(SYSTEM_PROMPT).build();
+                    messages.add(systemMsg);
+                    messageDOList.add(ChatCompletionMessageDO.builder()
+                            .role("system").content(SYSTEM_PROMPT)
+                            .conversationId(conversationId).createTime(new Date()).build());
+                } else {
+                    // --- 关键：不是新会话，需要重建上下文 ---
+                    // 将数据库里的记录转换回 Message 对象
+                    for (ChatCompletionMessageDO dbMsg : historyDOs) {
+                        ChatCompletionMessage msg = ChatCompletionMessage.builder()
+                                .role(dbMsg.getRole())
+                                .content(dbMsg.getContent())
+                                .name(dbMsg.getName())
+                                .toolCallId(dbMsg.getToolCallId())
+                                .build();
+                        // --- 关键修复：使用 TypeReference ---
+                        if (dbMsg.getToolCalls() != null && !dbMsg.getToolCalls().trim().isEmpty()) {
+                            List<ToolCall> toolCalls = objectMapper.readValue(
+                                    dbMsg.getToolCalls(),
+                                    new TypeReference<List<ToolCall>>() {} // 这里保留了泛型信息
+                            );
+                            msg.setToolCalls(toolCalls);
+                        }
+                        messages.add(msg);
+                    }
+                    // 注意：这里不再把历史消息加入 messageDOList，因为它们已经存过了
+                    // 我们只在最后保存本次新产生的消息
+                }
+
+
+                // --- 2. 核心修改：处理用户输入 ---
+                String rawUserInput = request.getMessage(); // 真实的用户输入
+
+                // --- 2.1 规则1：如果是“继续”，我们重写给AI看的内容，但保留日志 ---
+                String contentToSendToAI;
+                String id;
+                if (isContinueCommand(rawUserInput)) {
+                    // 数据库里存的是真实的 "继续"
+                    id = saveMessage(conversationId, "user", "", rawUserInput, "", "", "user", "", null, null);
+                    // 但是发给 AI 的，是更明确的指令
+                    contentToSendToAI = "请接着上一条内容继续输出。如果上一条内容不完整，请补充完整；如果已经结束，请提供更详细的补充信息。";
+                }
+                // --- 2.2 规则2：如果是普通消息 ---
+                else {
+                    // 普通消息，原样存，原样发
+                    id =saveMessage(conversationId, "user", "", rawUserInput, "", "", "user", "", null, null);
+                    contentToSendToAI = rawUserInput;
+                }
+
+                String resultId = saveMessage(conversationId, "assistant", "", "处理中...", "","success","result",id,"",null);
+
+
+                // 将处理后的消息加入上下文，让 AI 开始思考
+                messages.add(ChatCompletionMessage.builder().role("user").content(contentToSendToAI).build());
+                messageDOList.add(ChatCompletionMessageDO.builder()
+                        .role("user").content(contentToSendToAI)
+                        .conversationId(conversationId).createTime(new Date()).build());
 
                 // 发送任务 ID
                 sendSseEvent(emitter, "conversation", "任务已开始",
                         String.format("{\"taskId\": \"%s\", \"conversationId\": \"%s\"}", taskId, conversationId));
 
-
-                // Prepare Messages
-                List<ChatCompletionMessage> messages = new ArrayList<>();
-                messages.add(ChatCompletionMessage.builder().role("system").content(SYSTEM_PROMPT).build());
-                messages.add(ChatCompletionMessage.builder().role("user").content(request.getMessage()).build());
 
                 // Prepare Tools
                 List<com.cyberstrike.service.openai.model.OpenAIModels.Tool> tools = new ArrayList<>();
@@ -185,12 +250,14 @@ public class AgentService {
                 for (int i = 1; i <= maxIterations; i++) {
                     // 检查是否被取消
                     if (task.cancelled) {
+                        messageRepository.deleteById(resultId);
                         sendSseEvent(emitter, "cancelled", "任务已被用户取消，后续操作已停止。", null);
                         saveMessage(conversationId, "assistant", "", "任务已被用户取消，后续操作已停止。", "","success","cancelled",id,"",null);
                         task.status = "cancelled";
                         task.completedAt = LocalDateTime.now();
                         moveToCompleted(taskId, task);
                         emitter.complete();
+                        chatCompletionMessageRepository.saveAll(messageDOList);
                         return;
                     }
                     sendSseEvent(emitter, "iteration", "开始分析请求并制定测试策略",String.format("{\"iteration\": \"%s\"}", i));
@@ -202,6 +269,7 @@ public class AgentService {
                     saveMessage(conversationId, "assistant", "", "正在调用AI模型...", "","success","progress",id,String.valueOf(i),null);
 
 
+                    System.out.println(objectMapper.writeValueAsString(messages));
                     ChatCompletionRequest aiRequest = ChatCompletionRequest.builder()
                             .model(getCurrentModel())
                             .messages(messages)
@@ -217,6 +285,26 @@ public class AgentService {
                     ChatCompletionChoice choice = response.getChoices().get(0);
                     ChatCompletionMessage message = choice.getMessage();
                     messages.add(message);
+                    ChatCompletionMessageDO messageDO =new ChatCompletionMessageDO();
+                    BeanUtils.copyProperties(message, messageDO);
+                    messageDO.setConversationId(conversationId);
+                    messageDO.setCreateTime(new Date());
+                    // 1. 从 AI 响应中获取 toolCalls 列表
+                    List<ToolCall> toolCalls = choice.getMessage().getToolCalls();
+                    // 2. 使用 ObjectMapper 将 List<ToolCall> 转换为 JSON 字符串
+                    String toolCallsJson = null;
+                    if (toolCalls != null && !toolCalls.isEmpty()) {
+                        try {
+                            toolCallsJson = objectMapper.writeValueAsString(toolCalls);
+                        } catch (JsonProcessingException e) {
+                            log.error("序列化 tool_calls 失败", e);
+                            // 处理异常，例如设为空字符串或记录错误
+                            toolCallsJson = "[]";
+                        }
+                    }
+                    // 3. 将 JSON 字符串存入 DO 对象
+                    messageDO.setToolCalls(toolCallsJson);
+                    messageDOList.add(messageDO);
 
                     if (message.getContent() != null) {
                         sendSseEvent(emitter, "thinking", message.getContent(), null);
@@ -228,6 +316,7 @@ public class AgentService {
                         for (ToolCall toolCall : message.getToolCalls()) {
                             // 检查取消
                             if (task.cancelled) {
+                                messageRepository.deleteById(resultId);
                                 sendSseEvent(emitter, "cancelled", "任务已被用户取消，后续操作已停止。", null);
                                 saveMessage(conversationId, "assistant", "", "任务已被用户取消，后续操作已停止。", "","success","cancelled",id,"",null);
 
@@ -235,6 +324,7 @@ public class AgentService {
                                 task.completedAt = LocalDateTime.now();
                                 moveToCompleted(taskId, task);
                                 emitter.complete();
+                                chatCompletionMessageRepository.saveAll(messageDOList);
                                 return;
                             }
                             sendSseEvent(emitter, "tool_calls_detected", "检测到 1 个工具调用",null);
@@ -297,12 +387,25 @@ public class AgentService {
                             sendSseEvent(emitter, "tool_result", result,
                                     String.format("{\"toolName\": \"%s\"}", rawFunctionName));
 
+                            if (result == null || result.trim().isEmpty()) {
+                                // --- 关键修复：工具返回空时，给一个默认值 ---
+                                result = "工具执行成功，但未返回具体数据。";
+                                resultStatus = "success";
+                            }
                             // Add Tool Message (给 AI 的上下文 name 用原始名称)
                             messages.add(ChatCompletionMessage.builder()
                                     .role("tool")
                                     .toolCallId(callId)
                                     .name(rawFunctionName)
                                     .content(result)
+                                    .build());
+                            messageDOList.add(ChatCompletionMessageDO.builder()
+                                    .role("tool")
+                                    .toolCallId(callId)
+                                    .name(rawFunctionName)
+                                    .content(result)
+                                    .conversationId(conversationId)
+                                    .createTime(new Date())
                                     .build());
                         }
                     } else {
@@ -311,6 +414,7 @@ public class AgentService {
                     }
                 }
 
+                messageRepository.deleteById(resultId);
                 // Save Assistant Message (最终回复没有 functionName)
                 saveMessage(conversationId, "assistant", "", finalResponse, "","success","result",id,"",null);
 
@@ -333,6 +437,14 @@ public class AgentService {
                 moveToCompleted(taskId, task);
                 try {
                     sendSseEvent(emitter, "error", "执行出错: " + e.getMessage(), null);
+                    saveMessage(
+                            conversationId,
+                            "assistant",
+                            "",
+                            "执行出错: " + e.getMessage(),
+                            "",
+                            "success",
+                            "error","","","");
                     emitter.completeWithError(e);
                 } catch (Exception ex) {
                     // ignore
@@ -341,6 +453,13 @@ public class AgentService {
         });
 
         return emitter;
+    }
+
+    // 判断是否为继续指令
+    private boolean isContinueCommand(String message) {
+        if (message == null) return false;
+        String lowerMsg = message.trim().toLowerCase();
+        return lowerMsg.equals("继续") || lowerMsg.equals("continue") || lowerMsg.equals("go on");
     }
 
     // 取消任务
