@@ -110,7 +110,7 @@ public class ConfigController {
         // 4. 进行分页 (跳过 + 限制)
         // 注意：如果 page_size 是 -1 或者类似值表示“全部”，可以加个判断
         List<Map<String, Object>> pagedTools = filteredTools.stream()
-                .skip(page * page_size-1) // 跳过前面的页
+                .skip((page-1) * page_size) // 跳过前面的页
                 .limit(page_size)      // 只取这一页的数量
                 .map(tool -> {
                     Map<String, Object> map = new HashMap<>();

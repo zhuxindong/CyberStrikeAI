@@ -234,7 +234,7 @@ public class AgentService {
 
                 // Prepare Tools
                 List<com.cyberstrike.service.openai.model.OpenAIModels.Tool> tools = new ArrayList<>();
-                for (ToolRegistry.ToolDefinition def : toolRegistry.getTools()) {
+                for (ToolRegistry.ToolDefinition def : toolRegistry.getToolsAll()) {
                     var function = new com.cyberstrike.service.openai.model.OpenAIModels.Function(
                             def.name(), def.description(), def.parameters());
                     tools.add(new com.cyberstrike.service.openai.model.OpenAIModels.Tool("function", function));

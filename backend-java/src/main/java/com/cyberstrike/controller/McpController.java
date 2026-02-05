@@ -6,7 +6,9 @@ import com.cyberstrike.mcp.McpManager;
 import com.cyberstrike.mcp.McpTypes;
 import com.cyberstrike.repository.McpServerRepository;
 import com.cyberstrike.tool.ToolRegistry;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -23,6 +25,7 @@ public class McpController {
     private final McpServerRepository mcpServerRepository;
     private final ToolRegistry toolRegistry;
     private final McpManager mcpManager;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public McpController(McpServerRepository mcpServerRepository, ToolRegistry toolRegistry, McpManager mcpManager) {
         this.mcpServerRepository = mcpServerRepository;
@@ -90,16 +93,96 @@ public class McpController {
      * 创建 MCP 服务器
      */
     @PostMapping("/servers")
-    public ResponseEntity<?> createServer(@RequestBody McpServer server) {
-        server.setId(UUID.randomUUID().toString());
-        server.setStatus("disconnected");
-        server.setToolCount(0);
-        server.setCreatedAt(LocalDateTime.now());
-        server.setUpdatedAt(LocalDateTime.now());
+    @Transactional
+    public ResponseEntity<?> createServer(@RequestBody Map<String, Map<String, Object>> jsonMap) {
+        try {
+            List<McpServer> result = new ArrayList<>();
 
-        mcpServerRepository.save(server);
-        return ResponseEntity.ok(server);
+            // 直接遍历 jsonMap
+            for (Map.Entry<String, Map<String, Object>> entry : jsonMap.entrySet()) {
+                String name = entry.getKey(); // "hexstrike-ai"
+                Map<String, Object> config = entry.getValue(); // 内部的配置
+
+                McpServer server = mcpServerRepository.findByName(name).orElse(new McpServer());
+                boolean isNew = server.getId() == null;
+
+                server.setName(name);
+                server.setUpdatedAt(LocalDateTime.now());
+
+                if (isNew) {
+                    server.setId(UUID.randomUUID().toString());
+                    server.setCreatedAt(LocalDateTime.now());
+                    server.setStatus("disconnected");
+                    server.setEnabled("enabled");
+                    server.setToolCount(0);
+                }
+
+                server.setDescription((String) config.get("description"));
+
+                // 优化：安全地设置 timeout (处理 null 情况)
+                Object timeoutObj = config.get("timeout");
+                if (timeoutObj instanceof Integer) {
+                    server.setTimeout((Integer) timeoutObj);
+                } else if (timeoutObj instanceof Number) {
+                    // 兼容 JSON 解析出的 Double/Long 类型
+                    server.setTimeout(((Number) timeoutObj).intValue());
+                } else {
+                    server.setTimeout(null);
+                }
+
+                // 新增：处理 tool_enabled 对象
+                Object toolEnabledObj = config.get("tool_enabled");
+                if (toolEnabledObj != null) {
+                    // 将 Map/List 转为 JSON 字符串存入 env 字段
+                    // 注意：这里复用 env 字段存储额外配置，或者你也可以专门建一个 metadata 字段
+                    String toolEnabledJson = objectMapper.writeValueAsString(toolEnabledObj);
+                    server.setToolEnabled(toolEnabledJson);
+                } else {
+                    // 如果没有传 tool_enabled，清空该字段（或者保留旧值，看需求）
+                    // 这里选择清空，表示未配置
+                    server.setToolEnabled(null);
+                }
+                // 处理 transport
+                if (config.containsKey("transport")&&!"stdio".equalsIgnoreCase((String)config.get("transport"))) {
+                    server.setTransport((String) config.get("transport"));
+                    server.setUrl((String) config.get("url"));
+                    server.setCommand(null);
+                    server.setArgs(null);
+                    server.setEnv(null);
+                } else {
+                    server.setTransport("stdio");
+                    server.setCommand((String) config.get("command"));
+
+                    // 将 List/Map 转为 JSON 字符串存入数据库
+                    Object argsObj = config.get("args");
+                    server.setArgs(argsObj != null ? objectMapper.writeValueAsString(argsObj) : null);
+
+                    Object envObj = config.get("env");
+                    server.setEnv(envObj != null ? objectMapper.writeValueAsString(envObj) : null);
+                }
+
+                mcpServerRepository.save(server);
+                result.add(server);
+            }
+
+            return ResponseEntity.ok(result);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body("JSON 解析错误: " + e.getMessage());
+        }
     }
+//    @PostMapping("/servers")
+//    public ResponseEntity<?> createServer(@RequestBody McpServer server) {
+//        server.setId(UUID.randomUUID().toString());
+//        server.setStatus("disconnected");
+//        server.setToolCount(0);
+//        server.setCreatedAt(LocalDateTime.now());
+//        server.setUpdatedAt(LocalDateTime.now());
+//
+//        mcpServerRepository.save(server);
+//        return ResponseEntity.ok(server);
+//    }
 
     /**
      * 更新 MCP 服务器
@@ -235,8 +318,13 @@ public class McpController {
      */
     @GetMapping("/stats")
     public ResponseEntity<?> getStats() {
-        Map<String, Object> stats = mcpManager.getStats();
-        stats.put("totalBuiltinTools", toolRegistry.getTools().size());
+//        Map<String, Object> stats = mcpManager.getStats();
+//        stats.put("totalBuiltinTools", toolRegistry.getTools().size());
+        Map<String, Object> stats =new HashMap<>();
+        stats.put("status",mcpServerRepository.findByStatus("connected").size());
+        stats.put("enabled",mcpServerRepository.findByEnabled("enabled").size());
+        stats.put("disabled",mcpServerRepository.findByEnabled("disabled").size());
+        stats.put("total",mcpServerRepository.count());
         return ResponseEntity.ok(stats);
     }
 }
