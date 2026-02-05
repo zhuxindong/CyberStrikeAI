@@ -1,10 +1,13 @@
 package com.cyberstrike.tool;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
@@ -260,5 +263,21 @@ public class YamlToolLoader {
         if (tool != null) {
             tool.setEnabled(enabled);
         }
+    }
+
+    public void updateEnabledInYamlFile(String name,boolean enabled) throws IOException {
+        Path toolsPath = Paths.get(toolsDir);
+        Path filePath  = toolsPath.resolve(name + ".yaml");
+        // 读取文件为 JsonNode 树
+        JsonNode rootNode = yamlMapper.readTree(filePath.toFile());
+
+        // 强制转换为 ObjectNode 以便修改
+        ObjectNode objectNode = (ObjectNode) rootNode;
+
+        // 更新 enabled 字段
+        objectNode.put("enabled", enabled);
+
+        // 写回文件
+        yamlMapper.writeValue(filePath.toFile(), rootNode);
     }
 }

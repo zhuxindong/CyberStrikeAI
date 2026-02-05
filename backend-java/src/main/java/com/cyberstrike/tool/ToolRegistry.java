@@ -246,7 +246,7 @@ public class ToolRegistry {
     }
 
     /**
-     * 获取所有工具定义（合并内置和 YAML）
+     * 获取所有工具定义（合并内置和 YAML(已启用)）
      */
     public Collection<ToolDefinition> getTools() {
         List<ToolDefinition> allTools = new ArrayList<>(builtinTools.values());
