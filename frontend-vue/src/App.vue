@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import ChatWindow from './components/ChatWindow.vue';
 import Sidebar from './components/Sidebar.vue';
 import ToolsPanel from './components/ToolsPanel.vue';
@@ -8,23 +8,38 @@ import RolesView from './components/RolesView.vue';
 import BatchQueueView from './components/BatchQueueView.vue';
 import KnowledgeView from './components/KnowledgeView.vue';
 import VulnsView from './components/VulnsView.vue';
-import MonitorView from './components/MonitorView.vue';
+// import MonitorView from './components/MonitorView.vue';
 import McpView from './components/McpView.vue';
+import MCPMonitor from './components/MCPMonitor.vue';
 import { 
   Setting, 
-  Tools, 
-  Monitor, 
+  // Monitor, 
   User, 
   VideoPlay, 
   ChatDotRound, 
   Warning,
   Collection,
-  Connection 
+  Connection,
+  Platform,
+  House
 } from '@element-plus/icons-vue';
 
 const currentConversationId = ref<string | undefined>();
 const showToolsPanel = ref(false);
-const currentView = ref<'chat' | 'config' | 'monitor' | 'roles' | 'batch' | 'vulns' | 'knowledge' | 'mcp'>('chat');
+const currentView = ref<'chat' | 'config' | 'roles' | 'batch' | 'vulns' | 'knowledge' | 'mcp' | 'mcpMonitor'>('chat');
+
+const currentViewName = computed(() => {
+  return {
+    chat: 'CyberStrikeAI',
+    batch: '批量任务管理',
+    knowledge: '知识库管理',
+    config: '系统设置',
+    mcpMonitor: 'MCP状态监控',
+    mcp: 'MCP管理',
+    roles: '角色管理',
+    vulns: '漏洞管理'
+  }[currentView.value];
+});
 
 const handleSelectConversation = (id: string) => {
   currentConversationId.value = id;
@@ -36,9 +51,9 @@ const handleCreateConversation = () => {
   currentView.value = 'chat';
 };
 
-const toggleToolsPanel = () => {
-  showToolsPanel.value = !showToolsPanel.value;
-};
+// const toggleToolsPanel = () => {
+//   showToolsPanel.value = !showToolsPanel.value;
+// };
 
 const handleViewConv = (id: string) => {
   currentConversationId.value = id;
@@ -55,89 +70,52 @@ const handleViewConv = (id: string) => {
         <span class="logo-text">CS</span>
       </div>
       
-      <div class="nav-items">
-        <div 
-          class="nav-item" 
-          :class="{ active: currentView === 'chat' }"
-          @click="currentView = 'chat'"
-          title="对话"
-        >
+      <el-menu mode="vertical">
+        <el-menu-item index="1" @click="currentView = 'chat'">
           <el-icon><ChatDotRound /></el-icon>
           <span class="nav-label">对话</span>
-        </div>
-        
-        <div 
-          class="nav-item" 
-          :class="{ active: currentView === 'batch' }"
-          @click="currentView = 'batch'"
-          title="批量任务"
-        >
+        </el-menu-item>
+        <el-menu-item index="2" @click="currentView = 'batch'">
           <el-icon><VideoPlay /></el-icon>
           <span class="nav-label">任务</span>
-        </div>
-
-        <div 
-          class="nav-item" 
-          :class="{ active: currentView === 'knowledge' }"
-          @click="currentView = 'knowledge'"
-          title="知识库"
-        >
+        </el-menu-item>
+        <el-menu-item index="3" @click="currentView = 'knowledge'">
           <el-icon><Collection /></el-icon>
           <span class="nav-label">知识</span>
-        </div>
-
-        <div 
-          class="nav-item" 
-          :class="{ active: currentView === 'roles' }"
-          @click="currentView = 'roles'"
-          title="角色管理"
-        >
+        </el-menu-item>
+        <el-menu-item index="4" @click="currentView = 'roles'">
           <el-icon><User /></el-icon>
           <span class="nav-label">角色</span>
-        </div>
-
-        <div 
-          class="nav-item" 
-          :class="{ active: currentView === 'vulns' }"
-          @click="currentView = 'vulns'"
-          title="漏洞管理"
-        >
+        </el-menu-item>
+        <el-menu-item index="5" @click="currentView = 'vulns'">
           <el-icon><Warning /></el-icon>
           <span class="nav-label">漏洞</span>
-        </div>
-
-        <div class="nav-spacer"></div>
-
-        <div 
-          class="nav-item" 
-          :class="{ active: currentView === 'monitor' }"
-          @click="currentView = 'monitor'"
-          title="监控"
-        >
+        </el-menu-item>
+        <!-- <el-menu-item index="6" @click="currentView = 'monitor'">
           <el-icon><Monitor /></el-icon>
           <span class="nav-label">监控</span>
-        </div>
-
-        <div 
-          class="nav-item" 
-          :class="{ active: currentView === 'mcp' }"
-          @click="currentView = 'mcp'"
-          title="MCP 管理"
-        >
-          <el-icon><Connection /></el-icon>
-          <span class="nav-label">MCP</span>
-        </div>
-
-        <div 
-          class="nav-item" 
-          :class="{ active: currentView === 'config' }"
-          @click="currentView = 'config'"
-          title="设置"
-        >
+        </el-menu-item> -->
+        <el-sub-menu index="6">
+          <template #title>
+            <el-icon><Connection /></el-icon>
+            <span class="nav-label">MCP</span>
+          </template>
+          <el-menu-item-group>
+            <el-menu-item index="7-1" @click="currentView = 'mcpMonitor'">
+              <el-icon><Platform /></el-icon>
+              <span class="nav-label">MCP状态监控</span>
+            </el-menu-item>
+            <el-menu-item index="7-2" @click="currentView = 'mcp'">
+              <el-icon><House /></el-icon>
+              <span class="nav-label">MCP管理</span>
+            </el-menu-item>
+          </el-menu-item-group>
+        </el-sub-menu>
+        <el-menu-item index="7" @click="currentView = 'config'">
           <el-icon><Setting /></el-icon>
           <span class="nav-label">设置</span>
-        </div>
-      </div>
+        </el-menu-item>
+      </el-menu>
     </nav>
 
     <!-- Secondary Sidebar (Contextual) -->
@@ -154,16 +132,9 @@ const handleViewConv = (id: string) => {
       <!-- Header -->
       <header class="app-header">
         <div class="header-left">
-          <h2>{{ 
-            currentView === 'chat' ? 'CyberStrikeAI' : 
-            currentView === 'batch' ? '批量任务管理' :
-            currentView === 'knowledge' ? '知识库管理' :
-            currentView === 'roles' ? '角色管理' :
-            currentView === 'config' ? '系统设置' :
-            currentView === 'vulns' ? '漏洞管理' : '监控'
-          }}</h2>
+          <h2>{{ currentViewName }}</h2>
         </div>
-        <div class="header-right">
+        <!-- <div class="header-right">
           <el-button 
             v-if="currentView === 'chat'"
             :icon="Tools" 
@@ -172,7 +143,7 @@ const handleViewConv = (id: string) => {
           >
             工具列表
           </el-button>
-        </div>
+        </div> -->
       </header>
       
       <!-- Content -->
@@ -208,15 +179,21 @@ const handleViewConv = (id: string) => {
             </div>
           </template>
 
-          <template v-else-if="currentView === 'monitor'">
+          <!-- <template v-else-if="currentView === 'monitor'">
             <div class="full-area">
               <MonitorView />
             </div>
-          </template>
+          </template> -->
 
           <template v-else-if="currentView === 'mcp'">
             <div class="full-area">
               <McpView />
+            </div>
+          </template>
+
+          <template v-else-if="currentView === 'mcpMonitor'">
+            <div class="full-area">
+              <MCPMonitor />
             </div>
           </template>
           
@@ -236,7 +213,7 @@ const handleViewConv = (id: string) => {
 </template>
 
 
-<style scoped>
+<style lang="scss" scoped>
 .app-layout {
   display: flex;
   height: 100vh;
@@ -246,8 +223,9 @@ const handleViewConv = (id: string) => {
 
 /* Navigation Rail */
 .nav-rail {
-  width: 64px;
-  background: linear-gradient(180deg, #fafbfc 0%, #f5f7fa 100%);
+  /* width: 64px; */
+  // background: linear-gradient(180deg, #fafbfc 0%, #f5f7fa 100%);
+  background-color: #fff;
   border-right: 1px solid var(--el-border-color-light);
   display: flex;
   flex-direction: column;
@@ -255,6 +233,11 @@ const handleViewConv = (id: string) => {
   padding: 16px 0;
   z-index: 100;
   flex-shrink: 0;
+
+  .el-menu {
+    width: 150px;
+    border: none;
+  }
 }
 
 .nav-logo {
@@ -309,7 +292,7 @@ const handleViewConv = (id: string) => {
 }
 
 .nav-label {
-  font-size: 10px;
+  font-size: 12px;
   transform: scale(0.9);
   font-weight: 500;
 }

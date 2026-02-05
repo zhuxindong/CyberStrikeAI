@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Plus, Refresh, Search, Delete, Edit, Connection, Link, Check, Close } from '@element-plus/icons-vue';
+import MCPDialog from './MCPDialog.vue';
 
 interface Tool {
   name: string;
@@ -10,13 +10,17 @@ interface Tool {
   enabled: boolean;
 }
 
-interface McpServer {
+export interface McpServer {
   id: string;
   name: string;
   transport: string;
   url?: string;
+  description?: string;
+  timeout?: number;
   command?: string;
   args?: string;
+  enabled?: string;
+  toolEnabled?: string;
   status: string;
   toolCount: number;
   lastConnectedAt?: string;
@@ -24,8 +28,22 @@ interface McpServer {
 
 const tools = ref<Tool[]>([]);
 const servers = ref<McpServer[]>([]);
-const stats = ref({ totalServers: 0, connectedServers: 0, totalTools: 0 });
 const loading = ref(false);
+const total = ref(0);
+const currentPage = ref(1);
+const pageSize = ref(20);
+const toolStats = ref({
+  page_enabled: 0,
+  page_total: 0,
+  total: 0,
+  total_enabled: 0
+});
+const MCPStats = ref({
+  disabled: 0,
+  enabled: 0,
+  status: 0,
+  total: 0
+});
 const searchQuery = ref('');
 const dialogVisible = ref(false);
 const isEdit = ref(false);
@@ -40,21 +58,39 @@ const currentServer = ref<McpServer>({
   toolCount: 0
 });
 
-const filteredTools = computed(() => {
-  if (!searchQuery.value) return tools.value;
-  const q = searchQuery.value.toLowerCase();
-  return tools.value.filter(t => 
-    t.name.toLowerCase().includes(q) || 
-    t.description?.toLowerCase().includes(q)
-  );
-});
+// 工具配置修改缓存
+const toolModifyCache = ref<any>({});
 
 const loadTools = async () => {
   try {
-    const res = await fetch('/api/mcp/tools');
+    const params: any = {
+      page: currentPage.value,
+      page_size: pageSize.value,
+      search: searchQuery.value
+    };
+    const query = Object.keys(params).map((key: string) => {
+      return `${key}=${params[key]}`;
+    });
+    const url = '/api/config/tools?' + query.join('&');
+
+    const res = await fetch(url);
     if (res.ok) {
       const data = await res.json();
       tools.value = data.tools || [];
+      total.value = data.total;
+      let page_enabled = 0, page_total = Math.min(pageSize.value, tools.value.length);
+      tools.value.forEach((tool: Tool) => {
+        if (tool.enabled) {
+          page_enabled++;
+        }
+      });
+      toolStats.value = {
+        page_enabled,
+        page_total,
+        total_enabled: data.total_enabled,
+        total: total.value
+      };
+      toolModifyCache.value = {};
     }
   } catch (e) {
     console.error('Failed to load tools');
@@ -79,11 +115,74 @@ const loadStats = async () => {
   try {
     const res = await fetch('/api/mcp/stats');
     if (res.ok) {
-      stats.value = await res.json();
+      MCPStats.value = await res.json();
     }
   } catch (e) {
     console.error('Failed to load stats');
   }
+};
+
+// 保存工具配置
+const saveSettings = async () => {
+  const body = Object.keys(toolModifyCache.value).map((key: string) => {
+    const enabled: boolean = toolModifyCache.value[key];
+    return {
+      name: key,
+      enabled
+    };
+  });
+  const res = await fetch('/api/config/tools/update', {
+    method: 'post',
+    headers: {
+      'Content-type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  if (res.ok) {
+    ElMessage.success('保存配置成功');
+    loadTools();
+    toolModifyCache.value = {};
+  } else {
+    ElMessage.error('保存配置失败');
+  }
+};
+
+// 切换全选
+const toggleSelectAll = (flag: boolean) => {
+  let modifiedCount = 0;
+  tools.value = tools.value.map((tool: Tool) => {
+    toolModifyCache.value[tool.name] = flag;
+    if (tool.enabled !== flag) {
+      tool.enabled = flag;
+      modifiedCount++;
+    }
+    return tool;
+  });
+  if (flag) {
+    toolStats.value.page_enabled += modifiedCount;
+    toolStats.value.total_enabled += modifiedCount;
+  } else {
+    toolStats.value.page_enabled -= modifiedCount;
+    toolStats.value.total_enabled -= modifiedCount;
+  }
+};
+
+// 选框事件
+const onToolEnableChange = (tool: Tool) => {
+  toolModifyCache.value[tool.name] = tool.enabled;
+  if (tool.enabled) {
+    toolStats.value.page_enabled++;
+    toolStats.value.total_enabled++;
+  } else {
+    toolStats.value.page_enabled--;
+    toolStats.value.total_enabled--;
+  }
+};
+
+// 翻页事件
+const onPageChange = (page: number) => {
+  currentPage.value = page;
+  loadTools();
 };
 
 const handleAddServer = () => {
@@ -121,33 +220,6 @@ const handleDeleteServer = async (id: string) => {
   }
 };
 
-const handleSaveServer = async () => {
-  if (!currentServer.value.name) {
-    ElMessage.warning('请填写服务器名称');
-    return;
-  }
-  
-  try {
-    const url = isEdit.value ? `/api/mcp/servers/${currentServer.value.id}` : '/api/mcp/servers';
-    const method = isEdit.value ? 'PUT' : 'POST';
-    
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(currentServer.value)
-    });
-    
-    if (res.ok) {
-      ElMessage.success(isEdit.value ? '更新成功' : '创建成功');
-      dialogVisible.value = false;
-      loadServers();
-      loadStats();
-    }
-  } catch (e) {
-    ElMessage.error('保存失败');
-  }
-};
-
 const handleConnect = async (server: McpServer) => {
   try {
     const res = await fetch(`/api/mcp/servers/${server.id}/connect`, { method: 'POST' });
@@ -176,18 +248,6 @@ const handleDisconnect = async (server: McpServer) => {
   }
 };
 
-const handleRefreshTools = async () => {
-  try {
-    const res = await fetch('/api/mcp/refresh-tools', { method: 'POST' });
-    if (res.ok) {
-      ElMessage.success('工具列表已刷新');
-      loadTools();
-    }
-  } catch (e) {
-    ElMessage.error('刷新失败');
-  }
-};
-
 const getStatusType = (status: string) => {
   switch (status) {
     case 'connected': return 'success';
@@ -196,14 +256,13 @@ const getStatusType = (status: string) => {
   }
 };
 
-const getTransportLabel = (transport: string) => {
-  switch (transport) {
-    case 'http': return 'HTTP';
-    case 'sse': return 'SSE';
-    case 'stdio': return 'STDIO';
-    default: return transport;
-  }
-};
+const getStatusName = (status: string) => {
+  return {
+    connected: '已连接',
+    disconnected: '未连接',
+    error: '连接失败',
+  }[status];
+}
 
 onMounted(() => {
   loadTools();
@@ -219,157 +278,136 @@ onMounted(() => {
       <div class="section-header">
         <h3>MCP 工具配置</h3>
         <div class="header-actions">
-          <el-input
-            v-model="searchQuery"
-            placeholder="搜索工具..."
-            :prefix-icon="Search"
-            clearable
-            style="width: 200px"
-          />
-          <el-button :icon="Refresh" @click="handleRefreshTools">刷新工具列表</el-button>
+          <el-button icon="Setting" type="primary" @click="saveSettings">保存工具配置</el-button>
         </div>
       </div>
-      
-      <div class="tools-stats">
-        <el-tag type="success">已启用: {{ stats.totalTools }}</el-tag>
-        <el-tag type="info">已禁用: 0</el-tag>
-        <el-tag>总计: {{ stats.totalTools }}</el-tag>
+
+      <div class="tools-controls">
+        <el-button @click="toggleSelectAll(true)">全选</el-button>
+        <el-button @click="toggleSelectAll(false)">全不选</el-button>
+        <el-input v-model="searchQuery" placeholder="搜索工具..." clearable
+          @keydown.enter="loadTools">
+          <template #append>
+            <el-button @click="loadTools">🔍</el-button>
+          </template>
+        </el-input>
+        <div class="tools-stats">
+          <span>
+            ✅ 当前页已启用:
+            <strong>{{ toolStats.page_enabled }}</strong>
+            / {{ toolStats.page_total }}
+          </span>
+          <span>
+            📊 总计已启用:
+            <strong>{{ toolStats.total_enabled }}</strong>
+            / {{ toolStats.total }}
+          </span>
+        </div>
       </div>
-      
+
       <div class="tools-list">
         <el-scrollbar height="300px">
-          <div 
-            v-for="tool in filteredTools" 
-            :key="tool.name" 
-            class="tool-item"
-          >
+          <div v-for="tool in tools" :key="tool.name" class="tool-item">
             <div class="tool-info">
+              <el-checkbox v-model="tool.enabled" @change="onToolEnableChange(tool)" />
               <span class="tool-name">{{ tool.name }}</span>
-              <el-tag size="small" type="success">{{ tool.source }}</el-tag>
             </div>
             <div class="tool-desc">{{ tool.description }}</div>
           </div>
-          <el-empty v-if="filteredTools.length === 0" description="未找到匹配的工具" />
+          <el-empty v-if="tools.length === 0" description="未找到匹配的工具" />
         </el-scrollbar>
+        <el-pagination background layout="->, prev, pager, next, total" :total="total" :page-size="pageSize" 
+          :current-change="currentPage"
+          @current-change="onPageChange" />
       </div>
     </div>
 
     <!-- 外部 MCP 配置区域 -->
-    <div class="section servers-section">
+    <div class="section">
       <div class="section-header">
         <h3>外部 MCP 配置</h3>
         <div class="header-actions">
-          <el-tag type="success">已连接: {{ stats.connectedServers }}</el-tag>
-          <el-tag type="info">已断开: {{ stats.totalServers - stats.connectedServers }}</el-tag>
-          <el-button type="primary" :icon="Plus" @click="handleAddServer">添加外部 MCP</el-button>
+          <el-button type="primary" icon="Plus" @click="handleAddServer">添加外部MCP</el-button>
         </div>
       </div>
-      
-      <div class="servers-list" v-loading="loading">
-        <template v-if="servers.length === 0">
-          <el-empty description="暂无外部 MCP 配置" />
-        </template>
-        <el-table v-else :data="servers" stripe>
-          <el-table-column prop="name" label="服务器名称" width="150" />
-          <el-table-column label="连接类型" width="100">
-            <template #default="{ row }">
-              <el-tag size="small">{{ getTransportLabel(row.transport) }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="地址/命令" min-width="200">
-            <template #default="{ row }">
-              <span class="mono-text">{{ row.transport === 'stdio' ? row.command : row.url }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="工具数" width="80" align="center">
-            <template #default="{ row }">
-              {{ row.toolCount || 0 }}
-            </template>
-          </el-table-column>
-          <el-table-column label="状态" width="100">
-            <template #default="{ row }">
-              <el-tag :type="getStatusType(row.status)" size="small">
-                {{ row.status === 'connected' ? '已连接' : '已断开' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="220" fixed="right">
-            <template #default="{ row }">
-              <el-button 
-                v-if="row.status !== 'connected'" 
-                link 
-                type="success" 
-                :icon="Connection" 
-                @click="handleConnect(row)"
-              >
-                连接
-              </el-button>
-              <el-button 
-                v-else 
-                link 
-                type="warning" 
-                :icon="Close" 
-                @click="handleDisconnect(row)"
-              >
-                断开
-              </el-button>
-              <el-button link :icon="Edit" @click="handleEditServer(row)">编辑</el-button>
-              <el-button link type="danger" :icon="Delete" @click="handleDeleteServer(row.id)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+      <div class="external-mcp-controls">
+        <div class="external-mcp-actions">
+          <div class="external-mcp-stats">
+            <span>
+              📊 总数:
+              <strong>{{ MCPStats.total }}</strong>
+            </span>
+            <span>
+              ✅ 已启用:
+              <strong>{{ MCPStats.enabled }}</strong>
+            </span>
+            <span>
+              ⏸ 已停用:
+              <strong>{{ MCPStats.disabled }}</strong>
+            </span>
+            <span>
+              🔗 已连接:
+              <strong>{{ MCPStats.status }}</strong>
+            </span>
+          </div>
+        </div>
+        <div class="external-mcp-list">
+          <div v-if="servers.length" class="external-mcp-items">
+            <div class="external-mcp-item" v-for="server in servers" :key="server.id">
+              <div class="external-mcp-item-header">
+                <div class="external-mcp-item-info">
+                  <h4>{{ server.name }}</h4>
+                  <el-tag :type="getStatusType(server.status)">{{ getStatusName(server.status) }}</el-tag>
+                </div>
+                <div class="external-mcp-item-actions">
+                  <el-button v-if="server.status !== 'connected'" type="primary" @click="handleConnect(server)">启动</el-button>
+                  <el-button v-else type="danger" @click="handleDisconnect(server)">停止</el-button>
+                  <el-button @click="handleEditServer(server)">编辑</el-button>
+                  <el-button type="danger" @click="handleDeleteServer(server.id)">删除</el-button>
+                </div>
+              </div>
+              <div class="external-mcp-item-details">
+                <div>
+                  <span>传输模式</span>
+                  <strong>{{ server.transport }}</strong>
+                </div>
+                <div v-if="server.toolCount > 0">
+                  <span>工具数量</span>
+                  <span>🔧 {{server.toolCount}} 个工具</span>
+                </div>
+                <div v-if="server.description">
+                  <span>描述</span>
+                  <span>{{ server.description }}</span>
+                </div>
+                <div v-if="server.timeout">
+                  <span>超时时间</span>
+                  <strong>{{ server.timeout }}</strong>
+                </div>
+                <div v-if="server.command">
+                  <span>命令</span>
+                  <code>{{ server.command }}</code>
+                </div>
+                <div v-if="server.url">
+                  <span>URL</span>
+                  <code>{{ server.url }}</code>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else class="external-mcp-empty">
+            📋 暂无外部MCP配置
+            <br>
+            <span>点击"添加外部MCP"按钮开始配置</span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- 添加/编辑对话框 -->
-    <el-dialog
-      v-model="dialogVisible"
-      :title="isEdit ? '编辑 MCP 服务器' : '添加外部 MCP'"
-      width="500px"
-    >
-      <el-form label-position="top">
-        <el-form-item label="服务器名称" required>
-          <el-input v-model="currentServer.name" placeholder="输入服务器名称" />
-        </el-form-item>
-        
-        <el-form-item label="连接类型">
-          <el-radio-group v-model="currentServer.transport">
-            <el-radio value="stdio">STDIO (进程)</el-radio>
-            <el-radio value="http">HTTP</el-radio>
-            <el-radio value="sse">SSE</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        
-        <template v-if="currentServer.transport === 'stdio'">
-          <el-form-item label="命令">
-            <el-input v-model="currentServer.command" placeholder="例如: python3" />
-          </el-form-item>
-          <el-form-item label="参数 (JSON 数组)">
-            <el-input 
-              v-model="currentServer.args" 
-              type="textarea" 
-              :rows="2"
-              placeholder='例如: ["-m", "mcp_server"]' 
-            />
-          </el-form-item>
-        </template>
-        
-        <template v-else>
-          <el-form-item label="URL">
-            <el-input v-model="currentServer.url" placeholder="https://mcp-server.example.com" />
-          </el-form-item>
-        </template>
-      </el-form>
-      
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSaveServer">保存</el-button>
-      </template>
-    </el-dialog>
+    <MCPDialog v-model:visible="dialogVisible" :is-edit="isEdit" :server-info="currentServer" @loadServers="loadServers" />
   </div>
 </template>
 
-<style scoped>
+<style lang="scss" scoped>
 .mcp-view {
   height: 100%;
   display: flex;
@@ -382,7 +420,7 @@ onMounted(() => {
 .section {
   background: white;
   border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
   padding: 16px;
 }
 
@@ -401,7 +439,6 @@ onMounted(() => {
 
 .header-actions {
   display: flex;
-  gap: 12px;
   align-items: center;
 }
 
@@ -411,9 +448,85 @@ onMounted(() => {
   margin-bottom: 12px;
 }
 
+.tools-controls {
+  display: flex;
+  margin: 12px 0;
+
+  .el-input {
+    height: 100%;
+    margin: 0 12px;
+  }
+
+  .tools-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: nowrap;
+    width: 100%;
+    overflow: visible;
+  }
+
+  .search-box {
+    display: flex;
+    gap: 4px;
+    flex: 1;
+    min-width: 150px;
+    align-items: center;
+  }
+
+  .tools-stats {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+    padding: 6px 12px;
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    box-shadow: var(--shadow-sm);
+    flex-wrap: nowrap;
+    flex-shrink: 1;
+    white-space: nowrap;
+
+    span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 0;
+      white-space: nowrap;
+      flex-shrink: 0;
+
+      &:not(:last-child)::after {
+        content: '';
+        width: 1px;
+        height: 16px;
+        background: var(--border-color);
+        margin-left: 8px;
+        display: inline-block;
+      }
+
+      strong {
+        color: var(--text-primary);
+        font-weight: 600;
+        margin-left: 4px;
+      }
+    }
+  }
+
+
+}
+
 .tools-list {
   border: 1px solid #ebeef5;
   border-radius: 4px;
+  margin-bottom: 12px;
+  padding: 8px 16px;
+
+  .el-pagination {
+    margin: 12px 0;
+  }
 }
 
 .tool-item {
@@ -452,5 +565,146 @@ onMounted(() => {
   font-family: monospace;
   font-size: 12px;
   color: #606266;
+}
+
+.external-mcp-controls {
+  .external-mcp-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+
+    .external-mcp-stats {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-left: auto;
+      margin-bottom: 12px;
+      padding: 10px 20px;
+      background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      box-shadow: var(--shadow-sm);
+
+      >span {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 0;
+        white-space: nowrap;
+      }
+
+      strong {
+        color: var(--text-primary);
+        font-weight: 600;
+        margin-left: 4px;
+      }
+    }
+  }
+
+  .external-mcp-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    .external-mcp-items {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .external-mcp-item {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+
+      &:hover {
+        box-shadow: var(--shadow-md);
+        border-color: var(--accent-color);
+        transform: translateY(-2px);
+      }
+
+      .external-mcp-item-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+
+        .external-mcp-item-info {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex: 1;
+          min-width: 0;
+
+          h4 {
+            margin: 0;
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+          }
+        }
+      }
+
+      .external-mcp-item-details {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border-color);
+
+        >div {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          padding: 12px;
+          background: var(--bg-secondary);
+          border-radius: 8px;
+          border: 1px solid var(--border-color);
+          transition: all 0.2s ease;
+
+          strong {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+          }
+
+          span {
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            word-break: break-word;
+            line-height: 1.5;
+          }
+        }
+      }
+    }
+
+    .external-mcp-empty {
+      margin-top: 8px;
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--text-muted);
+      font-size: 0.9375rem;
+      background: var(--bg-secondary);
+      border: 2px dashed var(--border-color);
+      border-radius: 12px;
+    }
+  }
 }
 </style>
