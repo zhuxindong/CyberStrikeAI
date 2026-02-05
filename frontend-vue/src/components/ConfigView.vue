@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Search, Refresh } from '@element-plus/icons-vue';
 
 interface Config {
   apiKey?: string;
@@ -29,31 +28,11 @@ const config = ref<Config>({
 });
 
 const tools = ref<ToolInfo[]>([]);
-const toolSearch = ref('');
 const activeTab = ref('openai');
 
 const loading = ref(false);
 const saving = ref(false);
 const toolsLoading = ref(false);
-
-// 筛选后的工具列表
-const filteredTools = computed(() => {
-  if (!toolSearch.value) return tools.value;
-  const search = toolSearch.value.toLowerCase();
-  return tools.value.filter(t => 
-    t.name.toLowerCase().includes(search) || 
-    t.description.toLowerCase().includes(search)
-  );
-});
-
-// 工具统计
-const toolStats = computed(() => ({
-  total: tools.value.length,
-  enabled: tools.value.filter(t => t.enabled).length,
-  disabled: tools.value.filter(t => !t.enabled).length,
-  builtin: tools.value.filter(t => t.source === 'builtin').length,
-  yaml: tools.value.filter(t => t.source === 'yaml').length
-}));
 
 const loadConfig = async () => {
   loading.value = true;
@@ -104,36 +83,6 @@ const saveConfig = async () => {
     ElMessage.error('保存配置失败');
   } finally {
     saving.value = false;
-  }
-};
-
-const toggleTool = async (tool: ToolInfo) => {
-  try {
-    const response = await fetch(`/api/config/tools/${tool.name}/toggle`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: !tool.enabled })
-    });
-    if (response.ok) {
-      tool.enabled = !tool.enabled;
-      ElMessage.success(`${tool.name} 已${tool.enabled ? '启用' : '禁用'}`);
-    } else {
-      ElMessage.error('切换失败');
-    }
-  } catch (error) {
-    ElMessage.error('切换工具状态失败');
-  }
-};
-
-const refreshTools = async () => {
-  try {
-    const response = await fetch('/api/config/tools/refresh', { method: 'POST' });
-    if (response.ok) {
-      await loadTools();
-      ElMessage.success('工具列表已刷新');
-    }
-  } catch (error) {
-    ElMessage.error('刷新失败');
   }
 };
 
@@ -211,73 +160,6 @@ onMounted(() => {
             </el-form-item>
           </el-form>
         </el-card>
-      </el-tab-pane>
-
-      <!-- 工具管理 -->
-      <el-tab-pane label="工具管理" name="tools">
-        <div class="tools-section" v-loading="toolsLoading">
-          <!-- 统计卡片 -->
-          <div class="tool-stats">
-            <div class="stat-item">
-              <span class="stat-value">{{ toolStats.total }}</span>
-              <span class="stat-label">总工具</span>
-            </div>
-            <div class="stat-item enabled">
-              <span class="stat-value">{{ toolStats.enabled }}</span>
-              <span class="stat-label">已启用</span>
-            </div>
-            <div class="stat-item disabled">
-              <span class="stat-value">{{ toolStats.disabled }}</span>
-              <span class="stat-label">已禁用</span>
-            </div>
-            <div class="stat-item builtin">
-              <span class="stat-value">{{ toolStats.builtin }}</span>
-              <span class="stat-label">内置</span>
-            </div>
-            <div class="stat-item yaml">
-              <span class="stat-value">{{ toolStats.yaml }}</span>
-              <span class="stat-label">YAML</span>
-            </div>
-          </div>
-
-          <!-- 搜索和刷新 -->
-          <div class="tools-toolbar">
-            <el-input
-              v-model="toolSearch"
-              placeholder="搜索工具..."
-              :prefix-icon="Search"
-              clearable
-              style="width: 300px;"
-            />
-            <el-button :icon="Refresh" @click="refreshTools">刷新工具</el-button>
-          </div>
-
-          <!-- 工具列表 -->
-          <div class="tools-list">
-            <div 
-              v-for="tool in filteredTools" 
-              :key="tool.name"
-              class="tool-item"
-              :class="{ disabled: !tool.enabled }"
-            >
-              <div class="tool-info">
-                <div class="tool-name">
-                  {{ tool.name }}
-                  <el-tag size="small" :type="tool.source === 'builtin' ? 'primary' : 'info'">
-                    {{ tool.source === 'builtin' ? '内置' : 'YAML' }}
-                  </el-tag>
-                </div>
-                <div class="tool-desc">{{ tool.description }}</div>
-              </div>
-              <el-switch
-                :model-value="tool.enabled"
-                @change="toggleTool(tool)"
-                active-text="启用"
-                inactive-text="禁用"
-              />
-            </div>
-          </div>
-        </div>
       </el-tab-pane>
     </el-tabs>
 
