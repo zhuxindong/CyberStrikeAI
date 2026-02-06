@@ -113,7 +113,7 @@ public class McpController {
                     server.setId(UUID.randomUUID().toString());
                     server.setCreatedAt(LocalDateTime.now());
                     server.setStatus("disconnected");
-                    server.setEnabled("enabled");
+                    server.setEnabled("true");
                     server.setToolCount(0);
                 }
 
@@ -132,6 +132,9 @@ public class McpController {
 
                 // 新增：处理 tool_enabled 对象
                 Object toolEnabledObj = config.get("tool_enabled");
+                if (toolEnabledObj == null) {
+                    toolEnabledObj = config.get("toolEnabled");
+                }
                 if (toolEnabledObj != null) {
                     // 将 Map/List 转为 JSON 字符串存入 env 字段
                     // 注意：这里复用 env 字段存储额外配置，或者你也可以专门建一个 metadata 字段
@@ -322,8 +325,8 @@ public class McpController {
 //        stats.put("totalBuiltinTools", toolRegistry.getTools().size());
         Map<String, Object> stats =new HashMap<>();
         stats.put("status",mcpServerRepository.findByStatus("connected").size());
-        stats.put("enabled",mcpServerRepository.findByEnabled("enabled").size());
-        stats.put("disabled",mcpServerRepository.findByEnabled("disabled").size());
+        stats.put("enabled",mcpServerRepository.findByEnabled("true").size());
+        stats.put("disabled",mcpServerRepository.findByEnabled("flase").size());
         stats.put("total",mcpServerRepository.count());
         return ResponseEntity.ok(stats);
     }

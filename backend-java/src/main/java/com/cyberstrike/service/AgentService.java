@@ -14,7 +14,9 @@ import com.cyberstrike.service.openai.model.OpenAIModels.*;
 import com.cyberstrike.tool.ToolRegistry;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -268,8 +270,6 @@ public class AgentService {
 
                     saveMessage(conversationId, "assistant", "", "正在调用AI模型...", "","success","progress",id,String.valueOf(i),null);
 
-
-                    System.out.println(objectMapper.writeValueAsString(messages));
                     ChatCompletionRequest aiRequest = ChatCompletionRequest.builder()
                             .model(getCurrentModel())
                             .messages(messages)
@@ -343,21 +343,58 @@ public class AgentService {
                             // --- 执行工具并捕获结果 ---
                             String result;
                             String resultStatus;
-
                             try {
-                                result = toolRegistry.execute(rawFunctionName, arguments);
-                                // 检查返回内容是否包含错误
-                                if (result.contains("Error") || result.contains("Exception") || result.contains("SyntaxError")) {
+                                // --- 1. 从 Registry 中查找工具定义 ---外部mcp
+                                ToolRegistry.ToolDefinition toolDefinition = toolRegistry.getToolsAll().stream()
+                                        .filter(def -> def.name().equalsIgnoreCase(rawFunctionName))
+                                        .findFirst()
+                                        .orElse(null);
+
+                                // --- 2. 根据定义执行逻辑 ---
+                                if (toolDefinition == null) {
+                                    result = "执行失败：工具未注册或已禁用: " + rawFunctionName;
                                     resultStatus = "failed";
-                                    result = "执行出错: " + result;
-                                } else {
+                                }
+                                // --- 情况 A: MCP 工具 (有自定义 Executor) ---
+                                else if (toolDefinition.executor() != null) {
+
+                                    JsonNode argsNode;
+                                    try {
+                                        // 尝试解析 AI 传来的 JSON 字符串
+                                        argsNode = objectMapper.readTree(arguments);
+                                    } catch (Exception e) {
+                                        // 如果解析失败，包装成简单的 input 对象
+                                        ObjectNode node = objectMapper.createObjectNode();
+                                        node.put("input", arguments);
+                                        argsNode = node;
+                                    }
+
+                                    // 执行 McpExecutor
+                                    result = toolDefinition.executor().apply(argsNode);
                                     resultStatus = "success";
                                 }
+                                // --- 情况 B: 内置/YAML 工具 (无 Executor) ---
+                                else {
+                                    result = toolRegistry.execute(rawFunctionName, arguments);
+                                    resultStatus = "success";
+                                }
+
+                                // --- 3. 统一的结果状态检查 ---
+                                // 注意：这里把检查逻辑独立出来，避免重复代码
+                                if (result == null || result.trim().isEmpty()) {
+                                    result = "工具执行成功，但未返回具体数据。";
+                                }
+                                else if ((result.contains("Error") || result.contains("Exception") || result.contains("SyntaxError")
+                                        || result.contains("错误") || result.contains("失败"))&&toolDefinition.executor() == null) {
+                                    resultStatus = "failed";
+                                    result = "执行出错: " + result;
+                                }
+                                // 如果没有上述问题，resultStatus 默认为 success (上面已设置)
+
                             } catch (Exception e) {
                                 result = "执行异常: " + e.getMessage();
                                 resultStatus = "failed";
                             }
-
                             // --- 保存工具调用记录 (包含序号和状态) ---
                             // 注意参数顺序: conversationId, role, functionName, content, resultStatus
                             saveMessage(
@@ -385,7 +422,7 @@ public class AgentService {
                             );
 
                             sendSseEvent(emitter, "tool_result", result,
-                                    String.format("{\"toolName\": \"%s\"}", rawFunctionName));
+                                    String.format("{\"toolName\": \"%s\",\"resultStatus\": \"%s\"}", rawFunctionName,resultStatus));
 
                             if (result == null || result.trim().isEmpty()) {
                                 // --- 关键修复：工具返回空时，给一个默认值 ---
