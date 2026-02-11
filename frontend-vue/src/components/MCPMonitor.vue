@@ -1,6 +1,6 @@
 <template>
   <div class="monitor-sections">
-    <section class="monitor-section monitor-overview">
+    <section class="monitor-section">
       <div class="section-header">
         <h3>执行统计</h3>
       </div>
@@ -17,7 +17,7 @@
         </div>
         <div class="monitor-stat-card">
           <h4>最近一次调用</h4>
-          <div class="monitor-stat-value">{{ stats.lastCallText }}</div>
+          <div class="monitor-stat-value">{{ stats.lastCallTime }}</div>
           <div class="monitor-stat-meta">最后刷新时间：{{ stats.lastUpdatedText }}</div>
         </div>
         <div class="monitor-stat-card" v-for="(item, i) in topCalls" :key="i">
@@ -29,51 +29,58 @@
         </div>
       </div>
     </section>
-    <section class="monitor-section monitor-executions">
+    <section class="monitor-section">
       <div class="section-header">
         <h3>最新执行记录</h3>
         <div class="section-actions">
           <div>
             <label>工具搜索</label>
-            <el-input v-model="toolName" placeholder="输入工具名称..." />
+            <el-input v-model="toolName" clearable placeholder="输入工具名称..." @input="debouncedGetTableData" />
           </div>
           <div>
             <label>状态筛选</label>
-            <el-select v-model="currentStatus" placeholder="选择状态">
-              <el-option label="全部" value="all" />
-              <el-option label="已完成" value="completed" />
+            <el-select v-model="currentStatus" placeholder="选择状态" clearable @change="getTableData">
+              <el-option label="已完成" value="success" />
               <el-option label="执行中" value="running" />
               <el-option label="失败" value="failed" />
             </el-select>
           </div>
         </div>
       </div>
-      <div class="monitor-batch-actions">
+      <div v-if="selectedRows.length" class="monitor-batch-actions">
         <div class="batch-actions-info">
           <span>已选择 {{ selectedRows.length }} 项</span>
         </div>
-        <div v-if="selectedRows.length" class="batch-actions-buttons">
-          <!-- <el-button type="primary" @click="selectAll">全选</el-button>
-          <el-button @click="unselectAll">取消全选</el-button> -->
+        <div class="batch-actions-buttons">
           <el-button type="danger" @click="batchDelete">批量删除</el-button>
         </div>
       </div>
       <div class="monitor-table-container">
-        <el-table ref="table" :data="talbeData" v-loading="loading" @select="onSelect">
+        <el-table ref="table" :data="talbeData" v-loading="loading" @select="onSelect" @select-all="onSelect">
           <el-table-column type="selection" />
           <el-table-column v-for="col in columns" :key="col.prop" :prop="col.prop" :label="col.label"
-            :width="col.width" />
+            :width="col.width">
+            <template #default="{ row }">
+              <template v-if="col.prop === 'statusLabel'">
+                <el-tag :type="row.statusTag">{{ row.statusLabel }}</el-tag>
+              </template>
+              <template v-else>
+                {{ row[col.prop] }}
+                <span v-if="col.prop === 'duration'"> 秒</span>
+              </template>
+            </template>
+          </el-table-column>
           <el-table-column label="操作">
             <template #default="{ row }">
               <div class="table-op">
-                <el-button @click="showDetail">查看详情</el-button>
+                <el-button @click="showDetail(row)">查看详情</el-button>
                 <el-button type="danger" @click="deleteRow(row)">删除</el-button>
               </div>
             </template>
           </el-table-column>
         </el-table>
         <el-pagination layout="->, prev, pager, next, total" background :total="total"
-          v-model:current-page="currentPage" @current-change="onPageChange" />
+          v-model:current-page="currentPage" @current-change="getTableData" />
       </div>
     </section>
   </div>
@@ -83,14 +90,17 @@
 <script setup lang="ts">
 import { escapeHtml } from '../utils/escape';
 import { onMounted, ref, useTemplateRef } from 'vue';
+import dayjs from 'dayjs';
 import McpCallDialog from './McpCallDialog.vue';
+import { debounce } from '@/utils/debounce';
+import { ElMessage, ElMessageBox } from 'element-plus';
 
 interface Stats {
   total: number;
   totalSuccess: number;
   totalFail: number;
-  successRate: number;
-  lastCallText: string;
+  successRate: string | number;
+  lastCallTime: string;
   lastUpdatedText: string;
 }
 
@@ -99,7 +109,8 @@ interface CallStats {
   totalCalls: number;
   successCalls: number;
   failedCalls: number;
-  successRate: number;
+  successRate: string | number;
+  lastCallTime: string;
 }
 
 const stats = ref<Stats>({
@@ -107,7 +118,7 @@ const stats = ref<Stats>({
   totalSuccess: 0,
   totalFail: 0,
   successRate: 0,
-  lastCallText: '',
+  lastCallTime: '',
   lastUpdatedText: ''
 });
 const topCalls = ref<CallStats[]>([]);
@@ -116,11 +127,15 @@ const currentStatus = ref('');
 const loading = ref(false);
 
 interface TableItem {
-  executionId: string;
+  id: string;
+  arguments: any;
   toolName: string;
+  status: string;
+  statusTag: string;
   statusLabel: string;
   startTime: string;
   duration: number;
+  result: any;
 }
 
 const columns = ref<{
@@ -152,69 +167,161 @@ const selectedRows = ref<TableItem[]>([]);
 const table = useTemplateRef('table');
 
 const dialogVisible = ref(false);
-const mcpCallDetail = ref<any>();
+const mcpCallDetail = ref<any>(null);
 
 onMounted(() => {
+  getStats();
   getTableData();
 });
 
-const getTableData = () => {
-
+const getStats = async () => {
+  const res = await fetch('/api/mcp/state');
+  if (res.ok) {
+    const result: CallStats[] = await res.json();
+    stats.value = {
+      total: 0,
+      totalSuccess: 0,
+      totalFail: 0,
+      successRate: 0,
+      lastCallTime: '1900',
+      lastUpdatedText: dayjs().format('YYYY-MM-DD hh:mm:ss')
+    };
+    const data = Object.values(result);
+    data.sort((a, b) => b.totalCalls - a.totalCalls);
+    topCalls.value = data.slice(0, 4);
+    data.forEach(item => {
+      item.successRate = (item.successCalls / item.totalCalls * 100).toFixed(0);
+      stats.value.total += item.totalCalls;
+      stats.value.totalSuccess += item.successCalls;
+      stats.value.totalFail += item.failedCalls;
+      if (new Date(item.lastCallTime) > new Date(stats.value.lastCallTime)) {
+        stats.value.lastCallTime = item.lastCallTime;
+      }
+    });
+    stats.value.successRate = (stats.value.totalSuccess / stats.value.total * 100).toFixed(0);
+  }
 };
+
+const getTableData = async () => {
+  let query = `page=${currentPage.value}&size=10`;
+  if (toolName.value) {
+    query += `&toolName=${toolName.value}`;
+  }
+  if (toolName.value) {
+    query += `&status=${currentStatus.value}`;
+  }
+  const res = await fetch(`/api/mcp/executions?${query}`);
+  if (res.ok) {
+    const result: {
+      list: TableItem[],
+      total: number
+    } = await res.json();
+    const statusMap: any = {
+      success: '成功',
+      running: '执行中',
+      failed: '失败',
+    };
+    const statusTagMap: any = {
+      success: 'success',
+      running: 'info',
+      failed: 'danger'
+    };
+    talbeData.value = result.list.map(item => {
+      item.statusLabel = statusMap[item.status];
+      item.statusTag = statusTagMap[item.status];
+      item.duration = parseFloat((item.duration / 1e9).toFixed(2));
+      return item;
+    });
+    total.value = result.total;
+  }
+};
+
+const debouncedGetTableData = debounce(getTableData, 300);
 
 const onSelect = () => {
   selectedRows.value = table.value.getSelectionRows();
 };
 
-const selectAll = () => {
-  table.value.toggleAllSelection();
-  onSelect();
-};
-
-const unselectAll = () => {
-  table.value.clearSelection();
-  onSelect();
-};
-
-const batchDelete = () => {
-  const ids: string[] = selectedRows.value.map(row => row.executionId);
+const batchDelete = async () => {
+  ElMessageBox.confirm('确定批量删除吗', '批量删除', {
+    type: 'error',
+    callback: async (action: string) => {
+      if (action === 'confirm') {
+        const ids: string[] = selectedRows.value.map(row => {
+          return `id=${row.id}`;
+        });
+        const res = await fetch(`/api/mcp/delete?${ids.join('&')}`);
+        if (res.ok) {
+          ElMessage.success('删除成功');
+          selectedRows.value = [];
+          getTableData();
+        } else {
+          ElMessage.error('删除失败');
+        }
+      }
+    }
+  })
 };
 
 const showDetail = (row: TableItem) => {
+  const content: string = JSON.stringify(row.result.content[0]);
+  let parsedContent: string;
+  try {
+    parsedContent = JSON.stringify(JSON.parse(content), null, 2);
+  } catch (error) {
+    parsedContent = content;
+  }
+  mcpCallDetail.value = {
+    id: row.id,
+    mcpExecutionIds: row.toolName,
+    createdAt: row.startTime,
+    args: row.arguments,
+    resultStatus: row.status,
+    content,
+    parsedContent
+  };
+  console.log(mcpCallDetail.value);
+  
   dialogVisible.value = true;
-  mcpCallDetail.value = row;
 };
 
 const deleteRow = (row: TableItem) => {
-    
-};
-
-const onPageChange = () => {
+  ElMessageBox.confirm("确定删除吗", "删除工具执行记录", {
+    type: 'error',
+    callback: async (action: string) => {
+      if (action === 'confirm') {
+        const res = await fetch(`/api/mcp/delete?id=${row.id}`);
+        if (res.ok) {
+          ElMessage.success('删除成功');
+          getTableData();
+        } else {
+          ElMessage.error('删除失败');
+        }
+      }
+    }
+  })
 
 };
 </script>
 
 <style lang="scss" scoped>
 .monitor-sections {
-  display: grid;
-  gap: 24px;
-  width: 100%;
-  box-sizing: border-box;
-  min-width: 0;
+  overflow: auto;
 }
 
 .monitor-section {
-  // background: var(--bg-primary);
-  // border: 1px solid var(--border-color);
   border-radius: 14px;
   padding: 20px;
-  // box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
   gap: 16px;
   min-width: 0;
   overflow: hidden;
   box-sizing: border-box;
+
+  &.monitor-executions {
+    overflow: auto;
+  }
 
   .section-header {
     display: flex;
@@ -289,8 +396,8 @@ const onPageChange = () => {
       }
 
       .monitor-stat-value {
-        font-size: 1.8rem;
-        font-weight: 600;
+        font-size: 20px;
+        margin: 6px 0;
         color: var(--text-primary);
         word-break: break-word;
         overflow-wrap: break-word;

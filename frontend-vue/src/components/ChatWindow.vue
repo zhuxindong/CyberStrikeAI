@@ -94,6 +94,31 @@ const fetchRoles = async () => {
   }
 };
 
+// 根据消息类型获取标题
+const getTitleByType = (type: string, params: any, content?: string) => {
+  let title = '';
+  if (type === 'tool_calls_detected' || type === 'progress') {
+    title = content || params.content || '';
+  } else if (type === 'tool_call') {
+    const toolName = params.mcpExecutionIds || params.toolName || '未知工具';
+    title = `🔧 调用工具: ${escapeHtml(toolName)}`
+  } else if (type === 'tool_result') {
+    const resultToolName = params.mcpExecutionIds || params.toolName || '未知工具';
+    const success = params.resultStatus === 'success';
+    const statusIcon = success ? '✅' : '❌';
+    title = `${statusIcon} 工具 ${escapeHtml(resultToolName)} 执行${success ? '完成' : '失败'}`
+  } else if (type === 'iteration') {
+    title = `正在进行第${params.iteration}轮迭代`;
+  } else if (type === 'cancelled') {
+    title = '⛔ 任务已取消';
+  } else if (type === 'thinking') {
+    title = '🤔 AI思考';
+  } else if (type === 'error') {
+    title = '❌ 错误';
+  }
+  return title;
+};
+
 // 加载对话历史消息
 const loadConversationHistory = async (conversationId: string) => {
   loading.value = true;
@@ -152,31 +177,6 @@ const scrollToBottom = async () => {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
   }
 };
-
-const getTitleByType = (type: string, params: any, content?: string) => {
-  let title = '';
-  if (type === 'tool_calls_detected' || type === 'progress') {
-    title = content || params.content || '';
-  } else if (type === 'tool_call') {
-    const toolName = params.mcpExecutionIds || params.toolName || '未知工具';
-    title = `🔧 调用工具: ${ escapeHtml(toolName) }`
-  } else if (type === 'tool_result') {
-    const resultToolName = params.mcpExecutionIds || params.toolName ||  '未知工具';
-    const success = params.resultStatus === 'success';
-    const statusIcon = success ? '✅' : '❌';
-    title = `${ statusIcon } 工具 ${ escapeHtml(resultToolName)} 执行${success ? '完成' : '失败' }`
-  } else if (type === 'iteration') {
-    title = `正在进行第${params.iteration}轮迭代`;
-  } else if (type === 'cancelled') {
-    title = '⛔ 任务已取消';
-  } else if (type === 'thinking') {
-    title = '🤔 AI思考';
-  } else if (type === 'error') {
-    title = '❌ 错误';
-  }
-
-  return title;
-}
 
 // 生成调用序列
 const generateMCPCalls = (message: Message) => {

@@ -34,7 +34,7 @@ const currentViewName = computed(() => {
     batch: '批量任务管理',
     knowledge: '知识库管理',
     config: '系统设置',
-    mcpMonitor: 'MCP状态监控',
+    mcpMonitor: 'MCP监控',
     mcp: 'MCP管理',
     roles: '角色管理',
     vulns: '漏洞管理'
@@ -103,7 +103,7 @@ const handleViewConv = (id: string) => {
           <el-menu-item-group>
             <el-menu-item index="7-1" @click="currentView = 'mcpMonitor'">
               <el-icon><Platform /></el-icon>
-              <span class="nav-label">MCP状态监控</span>
+              <span class="nav-label">MCP监控</span>
             </el-menu-item>
             <el-menu-item index="7-2" @click="currentView = 'mcp'">
               <el-icon><House /></el-icon>

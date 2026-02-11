@@ -161,7 +161,7 @@ const formatJSON = () => {
     return true;
   } catch (error) {
     console.log(error);
-    ElMessage.error(`JSON格式错误：${error}`);
+    ElMessage.error(`JSON格式错误: ${error}`);
   }
   return false;
 };
@@ -175,6 +175,13 @@ const confirm = async () => {
     return;
   }
   const { isEdit } = props;
+  if (isEdit) {
+    const parsed = JSON.parse(json.value);
+    if (!parsed[props.serverInfo.name]) {
+      ElMessage.error(`JSON配置必须包含${props.serverInfo.name}`);
+      return;
+    }
+  }
   const url = '/api/mcp/servers';
 
   loading.value = true;
