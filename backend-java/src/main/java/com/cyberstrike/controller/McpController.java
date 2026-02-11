@@ -1,17 +1,27 @@
 package com.cyberstrike.controller;
 
 import com.cyberstrike.entity.McpServer;
+import com.cyberstrike.entity.Message;
 import com.cyberstrike.mcp.McpException;
 import com.cyberstrike.mcp.McpManager;
 import com.cyberstrike.mcp.McpTypes;
 import com.cyberstrike.repository.McpServerRepository;
+import com.cyberstrike.repository.MessageRepository;
 import com.cyberstrike.tool.ToolRegistry;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -23,12 +33,14 @@ import java.util.stream.Collectors;
 public class McpController {
 
     private final McpServerRepository mcpServerRepository;
+    private final MessageRepository messageRepository;
     private final ToolRegistry toolRegistry;
     private final McpManager mcpManager;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public McpController(McpServerRepository mcpServerRepository, ToolRegistry toolRegistry, McpManager mcpManager) {
+    public McpController(McpServerRepository mcpServerRepository, MessageRepository messageRepository, ToolRegistry toolRegistry, McpManager mcpManager) {
         this.mcpServerRepository = mcpServerRepository;
+        this.messageRepository = messageRepository;
         this.toolRegistry = toolRegistry;
         this.mcpManager = mcpManager;
     }
@@ -330,4 +342,195 @@ public class McpController {
         stats.put("total",mcpServerRepository.count());
         return ResponseEntity.ok(stats);
     }
+
+
+    @GetMapping("/state")
+    public ResponseEntity<?> getState() {
+        List<Message> messageList = messageRepository.findAll();
+        Map<String, Map<String, Object>> statsMap = new LinkedHashMap<>();
+
+        // --- 核心修改：过滤 delFlag = 1 的数据 ---
+        List<Message> toolMessages = messageList.stream()
+                .filter(msg -> "tool_call".equals(msg.getType())
+                        && msg.getDelFlag() != 1) // 保留 delFlag 不等于 1 的记录
+                .collect(Collectors.toList());
+
+        Map<String, List<Message>> groupedByTool = toolMessages.stream()
+                .collect(Collectors.groupingBy(Message::getMcpExecutionIds));
+
+        for (Map.Entry<String, List<Message>> entry : groupedByTool.entrySet()) {
+            String toolName = entry.getKey();
+            List<Message> messages = entry.getValue();
+
+            int totalCalls = messages.size();
+            int successCalls = (int) messages.stream().filter(m -> "success".equals(m.getResultStatus())).count();
+            int failedCalls = totalCalls - successCalls;
+
+            Optional<Message> lastCallOpt = messages.stream()
+                    .max(Comparator.comparing(Message::getCreatedAt));
+
+            // --- 核心修改：定义格式化器 ---
+            String lastCallTime = lastCallOpt.map(message -> {
+                ZonedDateTime zonedDateTime = message.getCreatedAt().atZone(java.time.ZoneId.systemDefault());
+                // 使用你指定的格式 (注意: 24小时制用 HH)
+                return zonedDateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            }).orElse(null);
+
+            Map<String, Object> toolStats = new HashMap<>();
+            toolStats.put("toolName", toolName);
+            toolStats.put("totalCalls", totalCalls);
+            toolStats.put("successCalls", successCalls);
+            toolStats.put("failedCalls", failedCalls);
+            toolStats.put("lastCallTime", lastCallTime);
+
+            statsMap.put(toolName, toolStats);
+        }
+
+        return ResponseEntity.ok(statsMap);
+    }
+
+    @GetMapping("/delete")
+    @Transactional
+    public ResponseEntity<?> delete(@RequestParam(required = false) List<String> id) {
+        // 1. 校验参数
+        if (id == null || id.isEmpty()) {
+            return ResponseEntity.badRequest().body("ID 列表不能为空");
+        }
+
+        // 2. 执行批量删除
+        // 返回值是总共删除的记录数
+        int totalUpdated = messageRepository.deleteByToolIds(id);
+
+        // 3. 返回结果
+        return ResponseEntity.ok().body(Map.of(
+                "message", "删除成功",
+                "deletedCount", totalUpdated,
+                "ids", id
+        ));
+    }
+
+    /**
+     * 获取 MCP 执行记录详情
+     */
+    @GetMapping("/executions")
+    public ResponseEntity<?> executions(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String toolName,
+            @RequestParam(required = false) String status
+    ) {
+        page=page-1;
+        // 1. 处理分页和排序
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        // 2. 处理查询参数
+        String searchToolName = (toolName == null) ? "" : toolName;
+        String searchStatus = (status == null) ? "" : status;
+
+        // 3. 执行数据库查询
+        Page<Message> callPage = messageRepository.findByTypeAndDelFlagNotAndMcpExecutionIdsContainingIgnoreCaseAndResultStatusContainingIgnoreCase(
+                "tool_call", 1, searchToolName, searchStatus, pageable);
+
+        List<Message> toolCalls = callPage.getContent();
+
+        // 4. 准备响应结构 (包含 total)
+        Map<String, Object> response = new HashMap<>();
+        response.put("total", callPage.getTotalElements());
+
+        // 如果没有数据，直接返回
+        if (toolCalls.isEmpty()) {
+            response.put("list", Collections.emptyList());
+            return ResponseEntity.ok(response);
+        }
+
+        // 5. 提取 ID 关联结果
+        List<String> callIds = toolCalls.stream().map(Message::getId).collect(Collectors.toList());
+        List<Message> toolResults = messageRepository.findByToolIdInAndType(callIds, "tool_result");
+
+        // 6. 转换为 Map 提高查找效率
+        Map<String, Message> resultMap = toolResults.stream()
+                .collect(Collectors.toMap(Message::getToolId, msg -> msg, (m1, m2) -> m1));
+
+        // 7. 组装最终数据
+        List<Map<String, Object>> result = new ArrayList<>();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+        for (Message callMsg : toolCalls) {
+            Message resultMsg = resultMap.get(callMsg.getId());
+
+            Map<String, Object> record = new LinkedHashMap<>();
+            record.put("id", callMsg.getId());
+
+            // ✅ 使用 mcpExecutionIds 作为工具名称
+            record.put("toolName", callMsg.getMcpExecutionIds());
+
+            // 状态逻辑
+            String finalStatus = "running";
+            if (resultMsg != null) {
+                finalStatus = "success".equals(resultMsg.getResultStatus()) ? "success" : "failed";
+            }
+            record.put("status", finalStatus);
+
+            // 解析参数
+            record.put("arguments", parseJsonField(callMsg.getDataJson()));
+
+            // 构建结果对象
+            Map<String, Object> resultObj = buildResultContent(resultMsg);
+            record.put("result", resultObj);
+            record.put("error", resultMsg != null ? resultMsg.getContent() : "Execution in progress");
+
+            // 时间处理 (格式: yyyy-MM-dd HH:mm:ss)
+            String startTime = callMsg.getCreatedAt().atZone(ZoneId.systemDefault()).format(formatter);
+            String endTime = startTime;
+
+            // ⏱️ 耗时计算 (纳秒)
+            long durationInNanos = 0;
+            if (resultMsg != null && resultMsg.getCreatedAt() != null) {
+                endTime = resultMsg.getCreatedAt().atZone(ZoneId.systemDefault()).format(formatter);
+                durationInNanos = java.time.Duration.between(callMsg.getCreatedAt(), resultMsg.getCreatedAt()).toNanos();
+            }
+
+            record.put("startTime", startTime);
+            record.put("endTime", endTime);
+            record.put("duration", durationInNanos); // ✅ 单位: 纳秒
+
+            result.add(record);
+        }
+
+        response.put("list", result);
+        return ResponseEntity.ok(response);
+    }
+
+    // 辅助方法：解析 JSON 字段
+    private Map<String, Object> parseJsonField(String json) {
+        if (json == null || json.trim().isEmpty()) {
+            return new HashMap<>();
+        }
+        try {
+            // 这里需要注入 ObjectMapper 或使用静态实例
+            // return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+            return new HashMap<>();
+        } catch (Exception e) {
+            Map<String, Object> errorMap = new HashMap<>();
+            errorMap.put("parse_error", e.getMessage());
+            return errorMap;
+        }
+    }
+
+    // 辅助方法：构建结果内容
+    private Map<String, Object> buildResultContent(Message resultMsg) {
+        Map<String, Object> resultObj = new HashMap<>();
+        List<Map<String, String>> contentList = new ArrayList<>();
+
+        Map<String, String> contentItem = new HashMap<>();
+        contentItem.put("type", "text");
+        contentItem.put("text", resultMsg != null ? resultMsg.getContent() : "...");
+
+        contentList.add(contentItem);
+        resultObj.put("content", contentList);
+        resultObj.put("isError", resultMsg == null || !"success".equals(resultMsg.getResultStatus()));
+
+        return resultObj;
+    }
 }
+

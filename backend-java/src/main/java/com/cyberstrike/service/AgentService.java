@@ -209,18 +209,18 @@ public class AgentService {
                 String id;
                 if (isContinueCommand(rawUserInput)) {
                     // 数据库里存的是真实的 "继续"
-                    id = saveMessage(conversationId, "user", "", rawUserInput, "", "", "user", "", null, null);
+                    id = saveMessage(conversationId, "user", "", rawUserInput, "", "", "user", "", null, null, null, null,LocalDateTime.now());
                     // 但是发给 AI 的，是更明确的指令
                     contentToSendToAI = "请接着上一条内容继续输出。如果上一条内容不完整，请补充完整；如果已经结束，请提供更详细的补充信息。";
                 }
                 // --- 2.2 规则2：如果是普通消息 ---
                 else {
                     // 普通消息，原样存，原样发
-                    id =saveMessage(conversationId, "user", "", rawUserInput, "", "", "user", "", null, null);
+                    id =saveMessage(conversationId, "user", "", rawUserInput, "", "", "user", "", null, null, null, null,LocalDateTime.now());
                     contentToSendToAI = rawUserInput;
                 }
 
-                String resultId = saveMessage(conversationId, "assistant", "", "处理中...", "","success","result",id,"",null);
+                String resultId = saveMessage(conversationId, "assistant", "", "处理中...", "","success","result",id,"",null, null, null,LocalDateTime.now());
 
 
                 // 将处理后的消息加入上下文，让 AI 开始思考
@@ -254,7 +254,7 @@ public class AgentService {
                     if (task.cancelled) {
                         messageRepository.deleteById(resultId);
                         sendSseEvent(emitter, "cancelled", "任务已被用户取消，后续操作已停止。", null);
-                        saveMessage(conversationId, "assistant", "", "任务已被用户取消，后续操作已停止。", "","success","cancelled",id,"",null);
+                        saveMessage(conversationId, "assistant", "", "任务已被用户取消，后续操作已停止。", "","success","cancelled",id,"",null, null, null,LocalDateTime.now());
                         task.status = "cancelled";
                         task.completedAt = LocalDateTime.now();
                         moveToCompleted(taskId, task);
@@ -264,11 +264,11 @@ public class AgentService {
                     }
                     sendSseEvent(emitter, "iteration", "开始分析请求并制定测试策略",String.format("{\"iteration\": \"%s\"}", i));
 
-                    saveMessage(conversationId, "assistant", "", "开始分析请求并制定测试策略", "","success","iteration",id,String.valueOf(i),null);
+                    saveMessage(conversationId, "assistant", "", "开始分析请求并制定测试策略", "","success","iteration",id,String.valueOf(i),null, null, null,LocalDateTime.now());
 
                     sendSseEvent(emitter, "progress", "正在调用AI模型...", null);
 
-                    saveMessage(conversationId, "assistant", "", "正在调用AI模型...", "","success","progress",id,String.valueOf(i),null);
+                    saveMessage(conversationId, "assistant", "", "正在调用AI模型...", "","success","progress",id,String.valueOf(i),null, null, null,LocalDateTime.now());
 
                     ChatCompletionRequest aiRequest = ChatCompletionRequest.builder()
                             .model(getCurrentModel())
@@ -308,7 +308,7 @@ public class AgentService {
 
                     if (message.getContent() != null) {
                         sendSseEvent(emitter, "thinking", message.getContent(), null);
-                        saveMessage(conversationId, "assistant", "", message.getContent(), "","success","thinking",id,String.valueOf(i),null);
+                        saveMessage(conversationId, "assistant", "", message.getContent(), "","success","thinking",id,String.valueOf(i),null, null, null,LocalDateTime.now());
                     }
 
                     if ("tool_calls".equals(choice.getFinishReason()) && message.getToolCalls() != null) {
@@ -318,7 +318,7 @@ public class AgentService {
                             if (task.cancelled) {
                                 messageRepository.deleteById(resultId);
                                 sendSseEvent(emitter, "cancelled", "任务已被用户取消，后续操作已停止。", null);
-                                saveMessage(conversationId, "assistant", "", "任务已被用户取消，后续操作已停止。", "","success","cancelled",id,"",null);
+                                saveMessage(conversationId, "assistant", "", "任务已被用户取消，后续操作已停止。", "","success","cancelled",id,"",null, null, null,LocalDateTime.now());
 
                                 task.status = "cancelled";
                                 task.completedAt = LocalDateTime.now();
@@ -328,7 +328,7 @@ public class AgentService {
                                 return;
                             }
                             sendSseEvent(emitter, "tool_calls_detected", "检测到 1 个工具调用",null);
-                            saveMessage(conversationId, "assistant", "", "检测到 1 个工具调用", "","success","tool_calls_detected",id,String.valueOf(i),null);
+                            saveMessage(conversationId, "assistant", "", "检测到 1 个工具调用", "","success","tool_calls_detected",id,String.valueOf(i),null,null,null,LocalDateTime.now());
 
 
                             String rawFunctionName = toolCall.getFunction().getName();
@@ -340,6 +340,7 @@ public class AgentService {
                             functionCallCount.put(rawFunctionName, count);
                             String functionNameWithIndex = rawFunctionName + "#" + count;
 
+                            LocalDateTime createdAt = LocalDateTime.now();
                             // --- 执行工具并捕获结果 ---
                             String result;
                             String resultStatus;
@@ -397,19 +398,21 @@ public class AgentService {
                             }
                             // --- 保存工具调用记录 (包含序号和状态) ---
                             // 注意参数顺序: conversationId, role, functionName, content, resultStatus
-                            saveMessage(
+                            String toolResultId = saveMessage(
                                     conversationId,
                                     "assistant",
                                     rawFunctionName,
                                     "正在调用工具: " + rawFunctionName,
                                     functionNameWithIndex,
                                     resultStatus,
-                                    "tool_call",id,String.valueOf(i),String.format("{\"toolName\": \"%s\", \"arguments\": %s}", rawFunctionName, arguments)
-                            );
+                                    "tool_call",id,String.valueOf(i),String.format("{\"toolName\": \"%s\", \"arguments\": %s}", rawFunctionName, arguments), null, null
+                                    ,createdAt);
 
                             sendSseEvent(emitter, "tool_call", "正在调用工具: " + rawFunctionName,
                                     String.format("{\"toolName\": \"%s\", \"arguments\": %s}", rawFunctionName, arguments));
 
+                            LocalDateTime now = LocalDateTime.now();
+                            Integer secondsSinceCreation = (int) java.time.Duration.between(createdAt, now).getSeconds();
                             // --- 保存工具结果记录 ---
                             saveMessage(
                                     conversationId,
@@ -418,8 +421,8 @@ public class AgentService {
                                     result,
                                     functionNameWithIndex,
                                     resultStatus,
-                                    "tool_result", id,String.valueOf(i),String.format("{\"toolName\": \"%s\"}", rawFunctionName)
-                            );
+                                    "tool_result", id,String.valueOf(i),String.format("{\"toolName\": \"%s\"}", rawFunctionName),toolResultId,secondsSinceCreation
+                                    ,LocalDateTime.now());
 
                             sendSseEvent(emitter, "tool_result", result,
                                     String.format("{\"toolName\": \"%s\",\"resultStatus\": \"%s\"}", rawFunctionName,resultStatus));
@@ -453,14 +456,14 @@ public class AgentService {
 
                 messageRepository.deleteById(resultId);
                 // Save Assistant Message (最终回复没有 functionName)
-                saveMessage(conversationId, "assistant", "", finalResponse, "","success","result",id,"",null);
+                saveMessage(conversationId, "assistant", "", finalResponse, "","success","result",id,"",null,null,null,LocalDateTime.now());
 
                 // Send Response
                 sendSseEvent(emitter, "response", finalResponse, "{\"conversationId\": \"" + conversationId + "\"}");
-                saveMessage(conversationId, "assistant", "", finalResponse, "","success","response",id,"",null);
+                saveMessage(conversationId, "assistant", "", finalResponse, "","success","response",id,"",null,null,null,LocalDateTime.now());
 
                 sendSseEvent(emitter, "done", "", null);
-                saveMessage(conversationId, "assistant", "", "", "","success","done",id,"",null);
+                saveMessage(conversationId, "assistant", "", "", "","success","done",id,"",null,null,null,LocalDateTime.now());
 
                 task.status = "completed";
                 task.completedAt = LocalDateTime.now();
@@ -481,7 +484,7 @@ public class AgentService {
                             "执行出错: " + e.getMessage(),
                             "",
                             "success",
-                            "error","","","");
+                            "error","","","",null,null,LocalDateTime.now());
                     emitter.completeWithError(e);
                 } catch (Exception ex) {
                     // ignore
@@ -553,7 +556,8 @@ public class AgentService {
 
     private String saveMessage(String conversationId, String role,String mcp,
                                String content, String functionName, String resultStatus,
-                               String type,String requestId,String iteration,String dataJson) {
+                               String type,String requestId,String iteration,String dataJson,String toolId,
+                               Integer time,LocalDateTime createdAt) {
         Message msg = new Message();
         msg.setConversationId(conversationId);
         msg.setRole(role);
@@ -565,6 +569,9 @@ public class AgentService {
         msg.setRequestId(requestId);
         msg.setIteration(iteration);
         msg.setDataJson(dataJson);
+        msg.setToolId(toolId);
+        msg.setTime(time);
+        msg.setCreatedAt(createdAt);
         messageRepository.save(msg);
         return msg.getId();
     }
@@ -582,7 +589,7 @@ public class AgentService {
 
         try {
             // Save User Message
-            String id = saveMessage(conversationId, "user","", messageText,"","","0","","",null);
+            String id = saveMessage(conversationId, "user","", messageText,"","","0","","",null,null,null,LocalDateTime.now());
 
             // Prepare Messages
             List<ChatCompletionMessage> messages = new ArrayList<>();
@@ -678,7 +685,7 @@ public class AgentService {
                                 functionNameWithIndex,
                                 resultStatus,
                                 "1",id,String.valueOf(i)
-                                ,null);
+                                ,null,null,null,LocalDateTime.now());
 
                         // 如果执行成功，还要检查返回的结果内容，防止包含错误关键词
                         if (result.contains("Error") || result.contains("Exception") || result.contains("SyntaxError")) {
@@ -700,7 +707,7 @@ public class AgentService {
                                 resultStatus,
                                 functionNameWithIndex, // 使用带序号的名称存入数据库
                                 "2",id,String.valueOf(i)
-                                ,null);
+                                ,null,null,null,LocalDateTime.now());
 
                         // --- 4. Add Tool Message (给 AI 看的上下文通常用原始名称) ---
                         messages.add(ChatCompletionMessage.builder()
@@ -716,7 +723,7 @@ public class AgentService {
                 }
             }
             // Save Assistant Message
-            saveMessage(conversationId, "assistant","all", finalResponse, "all", "success","3",id,"",null);
+            saveMessage(conversationId, "assistant","all", finalResponse, "all", "success","3",id,"",null,null,null,LocalDateTime.now());
 
             task.status = "completed";
             task.completedAt = LocalDateTime.now();
