@@ -1,6 +1,8 @@
 package com.cyberstrike.entity;
 
 import jakarta.persistence.*;
+import lombok.Data;
+
 import java.time.LocalDateTime;
 
 /**
@@ -8,6 +10,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "mcp_servers")
+@Data
 public class McpServer {
 
     @Id
@@ -44,100 +47,19 @@ public class McpServer {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    // Getters and Setters
-    public String getId() {
-        return id;
-    }
+    @Column(name = "description")
+    private String description;
 
-    public void setId(String id) {
-        this.id = id;
-    }
+    @Column(name = "timeout")
+    private Integer timeout;
 
-    public String getName() {
-        return name;
-    }
+    @Column(name = "tool_enabled")
+    private String toolEnabled;
 
-    public void setName(String name) {
-        this.name = name;
-    }
+    @Column(name = "enabled")
+    private String enabled;
 
-    public String getTransport() {
-        return transport;
-    }
+    @Column(name = "error")
+    private String error;
 
-    public void setTransport(String transport) {
-        this.transport = transport;
-    }
-
-    public String getUrl() {
-        return url;
-    }
-
-    public void setUrl(String url) {
-        this.url = url;
-    }
-
-    public String getCommand() {
-        return command;
-    }
-
-    public void setCommand(String command) {
-        this.command = command;
-    }
-
-    public String getArgs() {
-        return args;
-    }
-
-    public void setArgs(String args) {
-        this.args = args;
-    }
-
-    public String getEnv() {
-        return env;
-    }
-
-    public void setEnv(String env) {
-        this.env = env;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
-    }
-
-    public Integer getToolCount() {
-        return toolCount;
-    }
-
-    public void setToolCount(Integer toolCount) {
-        this.toolCount = toolCount;
-    }
-
-    public LocalDateTime getLastConnectedAt() {
-        return lastConnectedAt;
-    }
-
-    public void setLastConnectedAt(LocalDateTime lastConnectedAt) {
-        this.lastConnectedAt = lastConnectedAt;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
 }

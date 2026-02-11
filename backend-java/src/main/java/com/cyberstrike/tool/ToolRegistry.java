@@ -1,8 +1,13 @@
 package com.cyberstrike.tool;
 
+import com.cyberstrike.entity.McpServer;
+import com.cyberstrike.mcp.McpExecutor;
+import com.cyberstrike.repository.McpServerRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -30,13 +35,16 @@ public class ToolRegistry {
     private final YamlToolLoader yamlToolLoader;
     private final com.cyberstrike.service.KnowledgeService knowledgeService;
     private final com.cyberstrike.service.PythonVenvService pythonVenvService;
+    private final McpServerRepository mcpServerRepository;
 
     public ToolRegistry(YamlToolLoader yamlToolLoader,
             com.cyberstrike.service.KnowledgeService knowledgeService,
-            com.cyberstrike.service.PythonVenvService pythonVenvService) {
+            com.cyberstrike.service.PythonVenvService pythonVenvService,
+                        McpServerRepository mcpServerRepository) {
         this.yamlToolLoader = yamlToolLoader;
         this.knowledgeService = knowledgeService;
         this.pythonVenvService = pythonVenvService;
+        this.mcpServerRepository = mcpServerRepository;
         registerBuiltinTools();
         log.info("工具注册完成: {} 个内置工具, {} 个 YAML 工具",
                 builtinTools.size(), yamlToolLoader.getAllTools().size());
@@ -271,6 +279,82 @@ public class ToolRegistry {
                 log.error("转换 YAML 工具失败: {}", yamlTool.getName(), e);
             }
         }
+
+        return allTools;
+    }
+
+    /**
+     * 获取所有工具定义
+     */
+    public Collection<ToolDefinition> getToolsAll() {
+        List<ToolDefinition> allTools = new ArrayList<>(builtinTools.values());
+
+        // --- 2. 添加 MCP 工具 (新增逻辑) ---
+        try {
+            // 从数据库查出所有启用且连接正常的 MCP 服务
+            List<McpServer> mcpServers = mcpServerRepository.findByStatus("connected");
+
+            for (McpServer server : mcpServers) {
+                // 跳过已存在的同名工具
+                if (builtinTools.containsKey(server.getName())) {
+                    log.warn("工具名冲突，跳过 MCP 工具: {}", server.getName());
+                    continue;
+                }
+
+                // --- 2.1 构建参数定义 (Parameters) ---
+                // 这里简单定义一个通用的 input 参数
+                // 实际上你可以解析 server.getArgs() 或 server.getToolEnabled() 来生成更精确的 JSON Schema
+                ObjectNode paramsNode = objectMapper.createObjectNode();
+                paramsNode.put("type", "object");
+
+                ObjectNode propertiesNode = objectMapper.createObjectNode();
+                ObjectNode inputProp = objectMapper.createObjectNode();
+                inputProp.put("type", "string");
+                inputProp.put("description", "The input data or command for the tool: " + server.getDescription());
+                propertiesNode.set("input", inputProp);
+
+                ArrayNode requiredNode = objectMapper.createArrayNode();
+                requiredNode.add("input");
+
+                paramsNode.set("properties", propertiesNode);
+                paramsNode.set("required", requiredNode);
+
+                // --- 2.2 创建工具定义 ---
+                // 注意：这里传入了 MCPExecutor，告诉系统如何执行这个工具
+                ToolDefinition mcpTool = new ToolDefinition(
+                        server.getName(),
+                        server.getDescription(),
+                        paramsNode,
+                        new McpExecutor(server, objectMapper) // 传入 executor
+                );
+                allTools.add(mcpTool);
+            }
+        } catch (Exception e) {
+            log.error("加载 MCP 工具列表失败", e);
+        }
+
+        // 添加 YAML 工具
+        for (YamlToolDefinition yamlTool : yamlToolLoader.getEnabledTools()) {
+            // 跳过已存在的内置工具
+            if (builtinTools.containsKey(yamlTool.getName())) {
+                continue;
+            }
+
+            try {
+                JsonNode params = objectMapper.valueToTree(yamlTool.toFunctionParameters());
+                allTools.add(new ToolDefinition(
+                        yamlTool.getName(),
+                        yamlTool.getShortDescription() != null ? yamlTool.getShortDescription()
+                                : yamlTool.getDescription(),
+                        params,
+                        null // YAML 工具使用 YamlToolLoader 执行
+                ));
+            } catch (Exception e) {
+                log.error("转换 YAML 工具失败: {}", yamlTool.getName(), e);
+            }
+        }
+
+
 
         return allTools;
     }

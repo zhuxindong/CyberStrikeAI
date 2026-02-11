@@ -43,13 +43,22 @@ public class Message {
     @Column(name = "iteration", nullable = false)
     private String iteration;
 
-    @Column(name = "data_json",columnDefinition = "LONGTEXT", nullable = false)
+    @Column(name = "data_json", columnDefinition = "LONGTEXT", nullable = false)
     private String dataJson;
+
+    @Column(name = "toolId", nullable = false)
+    private String toolId;
+
+    @Column(name = "time", nullable = false)
+    private Integer time;
+
+    @Column(name = "del_flag", nullable = false)
+    private Integer delFlag=0;
 
     public Message() {
     }
 
-    public Message(String conversationId, String role, String content, String functionName, String resultStatus, String type, String requestId, String iteration, String dataJson) {
+    public Message(String conversationId, String role, String content, String functionName, String resultStatus, String type, String requestId, String iteration, String dataJson, String toolId, Integer time, Integer delFlag) {
         this.conversationId = conversationId;
         this.role = role;
         this.content = content;
@@ -59,6 +68,8 @@ public class Message {
         this.requestId = requestId;
         this.iteration = iteration;
         this.dataJson = dataJson;
+        this.toolId = toolId;
+        this.time = time;
     }
 
     @jakarta.persistence.PrePersist
@@ -161,5 +172,29 @@ public class Message {
 
     public void setDataJson(String dataJson) {
         this.dataJson = dataJson;
+    }
+
+    public String getToolId() {
+        return toolId;
+    }
+
+    public void setToolId(String toolId) {
+        this.toolId = toolId;
+    }
+
+    public Integer getTime() {
+        return time;
+    }
+
+    public void setTime(Integer time) {
+        this.time = time;
+    }
+
+    public Integer getDelFlag() {
+        return delFlag;
+    }
+
+    public void setDelFlag(Integer delFlag) {
+        this.delFlag = delFlag;
     }
 }
