@@ -472,7 +472,7 @@ public class McpController {
             record.put("status", finalStatus);
 
             // 解析参数
-            record.put("arguments", parseJsonField(callMsg.getDataJson()));
+            record.put("arguments", callMsg.getDataJson());
 
             // 构建结果对象
             Map<String, Object> resultObj = buildResultContent(resultMsg);
@@ -502,20 +502,20 @@ public class McpController {
     }
 
     // 辅助方法：解析 JSON 字段
-    private Map<String, Object> parseJsonField(String json) {
-        if (json == null || json.trim().isEmpty()) {
-            return new HashMap<>();
-        }
-        try {
-            // 这里需要注入 ObjectMapper 或使用静态实例
-            // return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
-            return new HashMap<>();
-        } catch (Exception e) {
-            Map<String, Object> errorMap = new HashMap<>();
-            errorMap.put("parse_error", e.getMessage());
-            return errorMap;
-        }
-    }
+//    private Map<String, Object> parseJsonField(String json) {
+//        if (json == null || json.trim().isEmpty()) {
+//            return new HashMap<>();
+//        }
+//        try {
+//            // 这里需要注入 ObjectMapper 或使用静态实例
+//            // return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+//            return new HashMap<>();
+//        } catch (Exception e) {
+//            Map<String, Object> errorMap = new HashMap<>();
+//            errorMap.put("parse_error", e.getMessage());
+//            return errorMap;
+//        }
+//    }
 
     // 辅助方法：构建结果内容
     private Map<String, Object> buildResultContent(Message resultMsg) {

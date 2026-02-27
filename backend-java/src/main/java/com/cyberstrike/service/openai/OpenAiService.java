@@ -3,61 +3,31 @@ package com.cyberstrike.service.openai;
 import com.cyberstrike.entity.Config;
 import com.cyberstrike.repository.ConfigRepository;
 import com.cyberstrike.service.openai.model.OpenAIModels;
-import com.cyberstrike.service.openai.model.OpenAIModels.ChatCompletionRequest;
-import com.cyberstrike.service.openai.model.OpenAIModels.ChatCompletionResponse;
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.json.JsonWriteFeature;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
-import org.springframework.http.codec.json.Jackson2JsonDecoder;
-import org.springframework.http.codec.json.Jackson2JsonEncoder;
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 @Service
 public class OpenAiService {
 
-    private static final Logger log = LoggerFactory.getLogger(OpenAiService.class);
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(OpenAiService.class);
 
+    // --- 1. 核心修改：将 RestClient 定义为成员变量 (单例模式) ---
+    private final RestClient restClient;
 
-    private final RestClient.Builder restClientBuilder;
-    private final ConfigRepository configRepository;
+    // --- 2. 注入 Builder ---
+    @Autowired
+    public OpenAiService(ConfigRepository configRepository, RestClient.Builder restClientBuilder) {
 
-    public OpenAiService(ConfigRepository configRepository,
-               RestClient.Builder builder) {
-        this.configRepository = configRepository;
-        this.restClientBuilder = builder;
-        // 注意：这里不再构建 this.restClient
-    }
-    private RestClient createRestClient() {
-        ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-
-        // --- 删除或注释掉这一行（它是导致 20015 错误的直接原因）---
-        // objectMapper.getFactory().configure(JsonGenerator.Feature.ESCAPE_NON_ASCII, true);
-
-        // --- 保留：禁止控制字符（这是为了安全，防止注入）---
-        objectMapper.getFactory().configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, false);
-
-        // --- 优化：建议显式设置为不转义非 ASCII，虽然这是默认值 ---
-        // 如果你使用的是较新版本的 Jackson，这行甚至不需要
-        // objectMapper.getFactory().configure(JsonGenerator.Feature.ESCAPE_NON_ASCII, false);
-
-        // --- 其余配置保持不变 ---
-        MappingJackson2HttpMessageConverter jsonConverter = new MappingJackson2HttpMessageConverter();
-        jsonConverter.setObjectMapper(objectMapper);
-
-        // --- 原有的配置逻辑 ---
+        // --- A. 初始化配置 (只在启动时读取一次，提升性能) ---
         Config config = configRepository.findById(1L).orElse(null);
         String baseUrl = "https://api.openai.com";
         String apiKey = System.getenv("OPENAI_API_KEY");
@@ -75,92 +45,56 @@ public class OpenAiService {
             throw new IllegalStateException("API Key 未配置！");
         }
 
-        // 3. 构建 RestClient
-        // 关键区别：使用 messageConverters() 方法注入转换器
-        return restClientBuilder
+        // --- B. 核心修复：配置 HTTP 工厂 (解决连接中止问题) ---
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+
+        // 连接超时
+        requestFactory.setConnectTimeout(30_000);
+
+        // 读取超时 (关键：必须足够长，防止系统软件中止连接)
+        // 强制转换为 int，防止编译错误
+        requestFactory.setReadTimeout((int) 180_000);
+
+        // --- C. 配置 JSON 转换器 ---
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        objectMapper.getFactory().configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, false);
+
+        // --- D. 创建日志拦截器 ---
+        ClientHttpRequestInterceptor loggingInterceptor = (request, body, execution) -> {
+            // 可选：打印请求日志
+            // System.out.println("Request: " + request.getMethod() + " " + request.getURI());
+            return execution.execute(request, body);
+        };
+
+        // --- E. 构建 RestClient (只构建一次) ---
+        this.restClient = restClientBuilder
+                .requestFactory(requestFactory) // 注入工厂
                 .baseUrl(baseUrl)
                 .defaultHeader("Authorization", "Bearer " + apiKey)
                 .defaultHeader("Content-Type", "application/json")
-                // --- 注入消息转换器 ---
-                // 这会替换默认的转换器，确保使用我们配置的 ObjectMapper
                 .messageConverters(converters -> {
-                    converters.clear(); // 清除默认的
-                    converters.add(jsonConverter); // 添加配置好的 JSON 转换器
+                    converters.clear();
+                    converters.add(new org.springframework.http.converter.json.MappingJackson2HttpMessageConverter(objectMapper));
                 })
-                // --- 添加这一行：注册拦截器 ---
                 .requestInterceptor(loggingInterceptor)
                 .build();
     }
 
-    // 1. 创建日志拦截器
-    ClientHttpRequestInterceptor loggingInterceptor = (request, body, execution) -> {
-        // 打印请求头
-        System.out.println("=== HTTP Request ===");
-        System.out.println("URI: " + request.getURI());
-        System.out.println("Method: " + request.getMethod());
-        request.getHeaders().forEach((key, value) -> {
-            System.out.println("Header: " + key + " = " + value);
-        });
-
-        // 打印请求体
-        if (body.length > 0) {
-            System.out.println("Body: " + new String(body, StandardCharsets.UTF_8));
-        }
-
-        // 执行请求
-        return execution.execute(request, body);
-    };
-
-//    public OpenAiService(ConfigRepository configRepository,
-//            RestClient.Builder builder) {
-//        // 1. 从数据库加载配置 (假设 ID = 1 是 OpenAI 的配置)
-//        Config config = configRepository.findById(1L).orElse(null);
-//
-//        // 2. 设置默认值以防数据库中没有数据
-//        String baseUrl = ""; // 默认值
-//        String apiKey = "r"; // 默认值，或者抛出异常
-//
-//        if (config != null) {
-//            // 如果数据库中有值，则覆盖默认值
-//            if (config.getBaseUrl() != null && !config.getBaseUrl().isEmpty()) {
-//                baseUrl = config.getBaseUrl();
-//            }
-//            if (config.getApiKey() != null && !config.getApiKey().isEmpty()) {
-//                apiKey = config.getApiKey();
-//            }
-//        } else {
-//            log.warn("未在数据库中找到 ID 为 1 的配置，将使用默认值或环境变量。");
-//        }
-//
-//        // Ensure base URL ends with / if needed, but OpenAI usually wants
-//        // https://api.openai.com
-//        // We will append /v1/chat/completions manually
-//
-//        this.restClient = builder
-//                .baseUrl(baseUrl)
-//                .defaultHeader("Authorization", "Bearer " + apiKey)
-//                .defaultHeader("Content-Type", "application/json")
-//                .build();
-//    }
-
-    public ChatCompletionResponse chatCompletion(ChatCompletionRequest request) {
-        return createRestClient().post()
+    // --- 3. 业务方法：直接使用单例的 restClient ---
+    public OpenAIModels.ChatCompletionResponse chatCompletion(OpenAIModels.ChatCompletionRequest request) {
+        return restClient.post()
                 .uri("/v1/chat/completions")
-                .contentType(MediaType.APPLICATION_JSON)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                 .body(request)
                 .retrieve()
-                .body(ChatCompletionResponse.class);
+                .body(OpenAIModels.ChatCompletionResponse.class);
     }
 
-    // Streaming implementation would return Flux or similar, but for SSE we might
-    // handle it differently.
-    // For now, focus on non-stream or use simple input stream reading.
-    // Spring RestClient supports exchange() which gives access to connection.
-
     public OpenAIModels.EmbeddingResponse createEmbeddings(OpenAIModels.EmbeddingRequest request) {
-        return createRestClient().post()
+        return restClient.post()
                 .uri("/v1/embeddings")
-                .contentType(MediaType.APPLICATION_JSON)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                 .body(request)
                 .retrieve()
                 .body(OpenAIModels.EmbeddingResponse.class);
