@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Plus, Refresh, Search, Edit, Delete, Link, InfoFilled } from '@element-plus/icons-vue';
+import { Plus, Refresh, Search, Edit, Delete, Link } from '@element-plus/icons-vue';
 
 interface Vulnerability {
   id: string;
   title: string;
+  type: string;
   description?: string;
   severity: string;
   status: string;
@@ -14,8 +15,9 @@ interface Vulnerability {
   evidence?: string;
   recommendation?: string;
   conversationId?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  expand?: boolean;
 }
 
 interface Stats {
@@ -24,37 +26,51 @@ interface Stats {
   byStatus: Record<string, number>;
 }
 
+const autoSizeConfig = {
+  minRows: 3
+};
+
 const vulnerabilities = ref<Vulnerability[]>([]);
 const stats = ref<Stats>({ total: 0, bySeverity: {}, byStatus: {} });
 const loading = ref(false);
-const searchQuery = ref('');
+const idQuery = ref('');
+const conversationIdQuery = ref('');
+
+const pageNum = ref(1);
+const pageSize = ref(10);
+const total = ref(0);
+
 const filterSeverity = ref('');
 const filterStatus = ref('');
+
 const dialogVisible = ref(false);
 const isEdit = ref(false);
 const currentVuln = ref<Vulnerability>({
   id: '',
   title: '',
+  type: '',
   severity: 'medium',
   status: 'open',
   description: '',
   targetUrl: '',
-  recommendation: ''
+  recommendation: '',
+  createdAt: '',
+  updatedAt: ''
 });
 
 const severityOptions = [
-  { value: 'critical', label: '严重', color: '#f56c6c' },
-  { value: 'high', label: '高危', color: '#e6a23c' },
-  { value: 'medium', label: '中危', color: '#f4a460' },
-  { value: 'low', label: '低危', color: '#67c23a' },
-  { value: 'info', label: '信息', color: '#909399' }
+  { value: 'critical', label: '严重', color: '#dc3545' },
+  { value: 'high', label: '高危', color: '#fd7e14' },
+  { value: 'medium', label: '中危', color: '#ffc107' },
+  { value: 'low', label: '低危', color: '#20c997' },
+  { value: 'info', label: '信息', color: '#6c757d' }
 ];
 
 const statusOptions = [
-  { value: 'open', label: '待处理' },
-  { value: 'confirmed', label: '已确认' },
-  { value: 'fixed', label: '已修复' },
-  { value: 'false_positive', label: '误报' }
+  { value: 'open', label: '待处理', color: '#0066ff' },
+  { value: 'confirmed', label: '已确认', color: '#28a745' },
+  { value: 'fixed', label: '已修复', color: '#6c757d' },
+  { value: 'false_positive', label: '误报', color: '#dc3545' }
 ];
 
 const getSeverityColor = (severity: string) => {
@@ -69,30 +85,39 @@ const getStatusLabel = (status: string) => {
   return statusOptions.find(s => s.value === status)?.label || status;
 };
 
-const filteredVulnerabilities = computed(() => {
-  return vulnerabilities.value.filter(v => {
-    const matchSearch = !searchQuery.value || 
-      v.title.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      v.targetUrl?.toLowerCase().includes(searchQuery.value.toLowerCase());
-    const matchSeverity = !filterSeverity.value || v.severity === filterSeverity.value;
-    const matchStatus = !filterStatus.value || v.status === filterStatus.value;
-    return matchSearch && matchSeverity && matchStatus;
-  });
-});
+const getStatusColor = (status: string) => {
+  return statusOptions.find(s => s.value === status)?.color || '#909399';
+};
 
-const loadVulnerabilities = async () => {
+const loadVulnerabilities = async (reset: boolean = false) => {
+  if (reset) {
+    pageNum.value = 1;
+  }
   loading.value = true;
   try {
-    const res = await fetch('/api/vulnerabilities?limit=200');
+    let query = '';
+    query += `page=${pageNum.value}`;
+    query += `&size=${pageSize.value}`;
+    query += `&severity=${filterSeverity.value || ''}`;
+    query += `&status=${filterStatus.value || ''}`;
+    query += `&id=${idQuery.value}`;
+    query += `&conversationId=${conversationIdQuery.value}`;
+
+    const res = await fetch(`/api/vulnerabilities?${query}`);
     if (res.ok) {
       const data = await res.json();
       vulnerabilities.value = data.vulnerabilities || [];
+      total.value = data.total;
     }
   } catch (e) {
     ElMessage.error('加载漏洞列表失败');
   } finally {
     loading.value = false;
   }
+};
+
+const reset = () => {
+  idQuery.value = conversationIdQuery.value = filterSeverity.value = filterStatus.value = '';
 };
 
 const loadStats = async () => {
@@ -111,13 +136,98 @@ const handleAdd = () => {
   currentVuln.value = {
     id: '',
     title: '',
+    type: '',
     severity: 'medium',
     status: 'open',
     description: '',
     targetUrl: '',
-    recommendation: ''
+    recommendation: '',
+    createdAt: '',
+    updatedAt: ''
   };
   dialogVisible.value = true;
+};
+
+// 将漏洞格式化为Markdown
+const formatVulnerabilityAsMarkdown = (vuln: Vulnerability) => {
+  const severityText = {
+    'critical': '严重',
+    'high': '高危',
+    'medium': '中危',
+    'low': '低危',
+    'info': '信息'
+  }[vuln.severity] || vuln.severity;
+
+  const statusText = {
+    'open': '待处理',
+    'confirmed': '已确认',
+    'fixed': '已修复',
+    'false_positive': '误报'
+  }[vuln.status] || vuln.status;
+
+  const createdDate = new Date(vuln.createdAt).toLocaleString('zh-CN');
+  const updatedDate = new Date(vuln.updatedAt).toLocaleString('zh-CN');
+
+  let markdown = `# ${vuln.title}\n\n`;
+
+  markdown += `## 基本信息\n\n`;
+  markdown += `- **漏洞ID**: \`${vuln.id}\`\n`;
+  markdown += `- **严重程度**: ${severityText}\n`;
+  markdown += `- **状态**: ${statusText}\n`;
+  if (vuln.type) {
+    markdown += `- **类型**: ${vuln.type}\n`;
+  }
+  if (vuln.targetUrl) {
+    markdown += `- **目标**: ${vuln.targetUrl}\n`;
+  }
+  markdown += `- **会话ID**: \`${vuln.conversationId}\`\n`;
+  markdown += `- **创建时间**: ${createdDate}\n`;
+  markdown += `- **更新时间**: ${updatedDate}\n\n`;
+
+  if (vuln.description) {
+    markdown += `## 描述\n\n${vuln.description}\n\n`;
+  }
+
+  if (vuln.evidence) {
+    markdown += `## 证明（POC）\n\n\`\`\`\n${vuln.evidence}\n\`\`\`\n\n`;
+  }
+
+  if (vuln.affectedComponent) {
+    markdown += `## 影响\n\n${vuln.affectedComponent}\n\n`;
+  }
+
+  if (vuln.recommendation) {
+    markdown += `## 修复建议\n\n${vuln.recommendation}\n\n`;
+  }
+
+  return markdown;
+};
+
+const handleDownload = (vuln: Vulnerability) => {
+  const md = formatVulnerabilityAsMarkdown(vuln);
+  // 创建Blob对象
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+
+  // 创建下载链接
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+
+  // 生成文件名（使用漏洞标题，清理特殊字符，保留中文）
+  const cleanTitle = vuln.title
+    .replace(/[<>:"/\\|?*]/g, '') // 移除Windows不允许的字符
+    .replace(/\s+/g, '_') // 空格替换为下划线
+    .substring(0, 50); // 限制长度
+  const fileName = `${cleanTitle}_${vuln.id.substring(0, 8)}.md`;
+  link.download = fileName;
+
+  // 触发下载
+  document.body.appendChild(link);
+  link.click();
+
+  // 清理
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 };
 
 const handleEdit = (vuln: Vulnerability) => {
@@ -141,6 +251,11 @@ const handleDelete = async (id: string) => {
 };
 
 const handleSave = async () => {
+  if (!currentVuln.value.conversationId) {
+    ElMessage.warning('请填写会话ID');
+    return;
+  }
+  
   if (!currentVuln.value.title) {
     ElMessage.warning('请填写漏洞标题');
     return;
@@ -170,13 +285,20 @@ const handleSave = async () => {
 };
 
 onMounted(() => {
-  loadVulnerabilities();
+  loadVulnerabilities(true);
   loadStats();
 });
 </script>
 
 <template>
   <div class="vulns-view">
+    <div class="actions">
+      <div>
+        <el-button :icon="Refresh" @click="loadVulnerabilities(false)">刷新</el-button>
+        <el-button type="primary" :icon="Plus" @click="handleAdd">添加漏洞</el-button>
+      </div>
+    </div>
+
     <!-- 统计卡片 -->
     <div class="stats-row">
       <div class="stat-card total">
@@ -207,67 +329,102 @@ onMounted(() => {
 
     <!-- 工具栏 -->
     <div class="toolbar">
-      <div class="filters">
-        <el-input
-          v-model="searchQuery"
-          placeholder="搜索漏洞..."
-          :prefix-icon="Search"
-          clearable
-          style="width: 200px"
-        />
-        <el-select v-model="filterSeverity" placeholder="严重程度" clearable style="width: 120px">
-          <el-option v-for="opt in severityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
-        </el-select>
-        <el-select v-model="filterStatus" placeholder="状态" clearable style="width: 120px">
-          <el-option v-for="opt in statusOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
-        </el-select>
-      </div>
-      <div class="actions">
-        <el-button :icon="Refresh" @click="loadVulnerabilities">刷新</el-button>
-        <el-button type="primary" :icon="Plus" @click="handleAdd">添加漏洞</el-button>
-      </div>
+      <el-form class="filters" inline label-position="top">
+        <el-form-item label="漏洞ID">
+          <el-input
+            v-model="idQuery"
+            placeholder="搜索漏洞ID"
+            :prefix-icon="Search"
+            clearable
+          />
+        </el-form-item>
+        <el-form-item label="会话ID">
+          <el-input
+            v-model="conversationIdQuery"
+            placeholder="筛选会话ID"
+            :prefix-icon="Search"
+            clearable
+          />
+        </el-form-item>
+        <el-form-item label="严重程度">
+          <el-select v-model="filterSeverity" placeholder="严重程度" clearable>
+            <el-option v-for="opt in severityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="filterStatus" placeholder="状态" clearable>
+            <el-option v-for="opt in statusOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="loadVulnerabilities(true)">筛选</el-button>
+          <el-button @click="reset">清除</el-button>
+        </el-form-item>
+      </el-form>
     </div>
 
     <!-- 漏洞列表 -->
     <div class="vuln-list" v-loading="loading">
-      <el-scrollbar>
-        <template v-if="filteredVulnerabilities.length === 0">
-          <el-empty description="暂无漏洞数据" />
-        </template>
-        <div v-else class="vuln-items">
-          <div 
-            v-for="vuln in filteredVulnerabilities" 
-            :key="vuln.id" 
-            class="vuln-item"
-          >
-            <div class="severity-indicator" :style="{ backgroundColor: getSeverityColor(vuln.severity) }"></div>
-            <div class="vuln-content">
-              <div class="vuln-header">
-                <span class="vuln-title">{{ vuln.title }}</span>
-                <el-tag :color="getSeverityColor(vuln.severity)" effect="dark" size="small">
-                  {{ getSeverityLabel(vuln.severity) }}
-                </el-tag>
-                <el-tag type="info" size="small" style="margin-left: 8px">
-                  {{ getStatusLabel(vuln.status) }}
-                </el-tag>
+      <template v-if="vulnerabilities.length === 0">
+        <el-empty description="暂无漏洞数据" />
+      </template>
+      <div v-else class="vuln-items">
+        <div 
+          v-for="vuln in vulnerabilities" 
+          :key="vuln.id" 
+          class="vuln-item"
+          :style="{borderLeftColor: getSeverityColor(vuln.severity)}"
+        >
+          <div class="vuln-content" @click="vuln.expand = !vuln.expand">
+            <div class="vuln-header">
+              <div class="vuln-title">
+                <el-icon :class="{ 'rotated': vuln.expand }"><ArrowRight /></el-icon>
+                {{ vuln.title }}
               </div>
-              <div class="vuln-meta">
-                <span v-if="vuln.targetUrl" class="meta-item">
-                  <el-icon><Link /></el-icon>
-                  {{ vuln.targetUrl }}
-                </span>
-                <span class="meta-item">
-                  {{ vuln.createdAt ? new Date(vuln.createdAt).toLocaleString() : '' }}
-                </span>
+              <div class="vuln-actions">
+                <el-button link icon="download" @click="handleDownload(vuln)">下载</el-button>
+                <el-button link :icon="Edit" @click="handleEdit(vuln)">编辑</el-button>
+                <el-button link type="danger" :icon="Delete" @click="handleDelete(vuln.id)">删除</el-button>
               </div>
             </div>
-            <div class="vuln-actions">
-              <el-button link :icon="Edit" @click="handleEdit(vuln)">编辑</el-button>
-              <el-button link type="danger" :icon="Delete" @click="handleDelete(vuln.id)">删除</el-button>
+            <div class="vuln-meta">
+              <el-tag :color="getSeverityColor(vuln.severity)" effect="dark" size="large">
+                {{ getSeverityLabel(vuln.severity) }}
+              </el-tag>
+              <el-tag :color="getStatusColor(vuln.status)" effect="dark" size="large">
+                {{ getStatusLabel(vuln.status) }}
+              </el-tag>
+              <span v-if="vuln.targetUrl">
+                <el-icon><Link /></el-icon>
+                {{ vuln.targetUrl }}
+              </span>
+              <span>
+                {{ vuln.createdAt ? new Date(vuln.createdAt).toLocaleString() : '' }}
+              </span>
+            </div>
+          </div>
+          <div :class="['vuln-info', { 'expand': vuln.expand }]">
+            <div>
+              <p>漏洞ID: </p>
+              <p>{{ vuln.id }}</p>
+            </div>
+            <div v-if="vuln.type">
+              <p>类型: </p>
+              <p>{{ vuln.type }}</p>
+            </div>
+            <div v-if="vuln.targetUrl">
+              <p>目标URL: </p>
+              <p>{{ vuln.targetUrl }}</p>
+            </div>
+            <div>
+              <p>会话ID: </p>
+              <p>{{ vuln.conversationId }}</p>
             </div>
           </div>
         </div>
-      </el-scrollbar>
+      </div>
+     <el-pagination v-model:currentPage="pageNum" :page-size="pageSize"
+        layout="->, prev, pager, next, total" :total="total" background @change="loadVulnerabilities(false)" />
     </div>
 
     <!-- 编辑对话框 -->
@@ -277,10 +434,12 @@ onMounted(() => {
       width="600px"
     >
       <el-form label-position="top">
+        <el-form-item label="会话ID" required>
+          <el-input v-model="currentVuln.conversationId" :disabled="isEdit" placeholder="输入会话ID" />
+        </el-form-item>
         <el-form-item label="漏洞标题" required>
           <el-input v-model="currentVuln.title" placeholder="输入漏洞标题" />
         </el-form-item>
-        
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="严重程度">
@@ -299,17 +458,27 @@ onMounted(() => {
             </el-form-item>
           </el-col>
         </el-row>
-        
+        <el-form-item label="漏洞类型">
+          <el-input v-model="currentVuln.type" placeholder="如: SQL注入、XSS、CSRF等" />
+        </el-form-item>
         <el-form-item label="目标 URL">
           <el-input v-model="currentVuln.targetUrl" placeholder="https://example.com/vulnerable-path" />
         </el-form-item>
-        
         <el-form-item label="漏洞描述">
-          <el-input v-model="currentVuln.description" type="textarea" :rows="3" placeholder="详细描述漏洞情况..." />
+          <el-input v-model="currentVuln.description" type="textarea" :autosize="autoSizeConfig"
+            placeholder="详细描述漏洞情况..." />
         </el-form-item>
-        
+        <el-form-item label="证明（POC）">
+          <el-input v-model="currentVuln.evidence" type="textarea" :autosize="autoSizeConfig"
+            placeholder="漏洞证明，如请求/响应、截图等" />
+        </el-form-item>
+        <el-form-item label="影响">
+          <el-input v-model="currentVuln.affectedComponent" type="textarea" :autosize="autoSizeConfig"
+            placeholder="漏洞影响说明" />
+        </el-form-item>
         <el-form-item label="修复建议">
-          <el-input v-model="currentVuln.recommendation" type="textarea" :rows="2" placeholder="修复建议..." />
+          <el-input v-model="currentVuln.recommendation" type="textarea" :autosize="autoSizeConfig"
+            placeholder="修复建议..." />
         </el-form-item>
       </el-form>
       
@@ -321,13 +490,19 @@ onMounted(() => {
   </div>
 </template>
 
-<style scoped>
+<style lang="scss" scoped>
 .vulns-view {
   height: 100%;
   display: flex;
   flex-direction: column;
   padding: 16px;
   gap: 16px;
+  overflow: auto;
+}
+
+.actions {
+  display: flex;
+  flex-direction: row-reverse;
 }
 
 .stats-row {
@@ -368,93 +543,121 @@ onMounted(() => {
 
 .toolbar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  background: white;
+  gap: 20px;
   padding: 12px 16px;
-  border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-}
 
-.filters {
-  display: flex;
-  gap: 12px;
-}
+  .filters {
+    align-items: end;
 
-.actions {
-  display: flex;
-  gap: 8px;
+    .el-form-item {
+      margin-right: 12px;
+    }
+
+    :deep(.el-input__wrapper) {
+      width: 200px;
+    }
+    
+    :deep(.el-select__wrapper) {
+      width: 120px;
+    }
+  }
 }
 
 .vuln-list {
-  flex: 1;
-  overflow: hidden;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  >.el-pagination {
+    margin-top: 12px;
+  }
 }
 
 .vuln-items {
-  padding: 8px;
+  padding: 8px 12px 8px 8px;
 }
 
 .vuln-item {
-  display: flex;
-  align-items: center;
   padding: 12px;
-  border-bottom: 1px solid #f0f0f0;
-  transition: background 0.2s;
-}
-
-.vuln-item:hover {
-  background: #fafafa;
-}
-
-.severity-indicator {
-  width: 4px;
-  height: 40px;
-  border-radius: 2px;
-  margin-right: 12px;
-  flex-shrink: 0;
+  border-radius: 8px;
+  border-left: 3px solid;
+  margin-bottom: 12px;
+  box-shadow: 0 0 8px #dfdfdf;
 }
 
 .vuln-content {
-  flex: 1;
-  min-width: 0;
+  padding: 12px;
+  border-radius: 8px;
+  transition: background-color 0.2s;
+  cursor: pointer;
+
+  &:hover {
+    background: #fafafa;
+  }
 }
 
 .vuln-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   margin-bottom: 4px;
+
+  .vuln-title {
+    color: #303133;
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 400px;
+
+    .el-icon {
+      font-size: 12px;
+      transition: transform 0.2s;
+      &.rotated {
+        transform: rotate(90deg);
+      }
+    }
+  }
+
+  .vuln-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
 }
 
-.vuln-title {
-  font-weight: 500;
-  color: #303133;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 400px;
-}
 
 .vuln-meta {
   display: flex;
-  gap: 16px;
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
   color: #909399;
+
+  .el-tag {
+    border-color: transparent;
+  }
 }
 
-.meta-item {
+.vuln-info {
   display: flex;
-  align-items: center;
-  gap: 4px;
-}
+  height: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  margin-top: 12px;
+  margin-left: 50px;
+  transition: height 0.2s;
+  background: #fafafa;
 
-.vuln-actions {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
+  &.expand {
+    padding: 8px;
+    height: auto;
+  }
+
+  >div {
+    margin-right: 20px;
+  }
+
+  p {
+    font-size: 14px;
+  }
 }
 </style>
