@@ -182,7 +182,27 @@ public class ToolRegistry {
                     }
                     cmd.append(" \"").append(url).append("\"");
 
-                    return executeCommandWin.apply(args, cmd.toString());
+                    // 1. 先执行命令
+                    String rawResult = executeCommandWin.apply(args, cmd.toString());
+
+                    // 2. 在这里加一个“过滤器”
+                    if (rawResult == null) return "NULL";
+
+                    // --- 简单粗暴的防护 ---
+                    // 如果结果里包含 "PK" 开头，或者包含大量不可见字符，说明是文件
+                    if (rawResult.length() >= 2 &&
+                            rawResult.charAt(0) == 'P' &&
+                            rawResult.charAt(1) == 'K') {
+                        return "Success: File downloaded (type: application/zip or executable). " +
+                                "Content not shown to prevent encoding errors.";
+                    }
+
+                    // 如果内容太长，截断
+                    if (rawResult.length() > 5000) {
+                        return rawResult.substring(0, 5000) + "... [Output cut off]";
+                    }
+
+                    return rawResult; // 正常返回
                 });
 
         // ==================================================================
