@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { Plus, ChatDotRound, Delete, Star, StarFilled, Search } from '@element-plus/icons-vue';
+import ConversationStore from "@/store/Conversation";
+import { storeToRefs } from 'pinia';
 
 interface Conversation {
   id: string;
@@ -9,15 +11,8 @@ interface Conversation {
   pinned: boolean;
 }
 
-const props = defineProps<{
-  currentId?: string;
-}>();
-
-const emit = defineEmits<{
-  (e: 'select', id: string): void;
-  (e: 'create'): void;
-}>();
-
+const store = ConversationStore();
+const { conversationId } = storeToRefs(store);
 const conversations = ref<Conversation[]>([]);
 const loading = ref(false);
 const searchQuery = ref('');
@@ -46,7 +41,7 @@ const createConversation = async () => {
     if (response.ok) {
       const newConv = await response.json();
       conversations.value.unshift(newConv);
-      emit('select', newConv.id);
+      conversationId.value = newConv.id;
     }
   } catch (error) {
     console.error('Failed to create conversation:', error);
@@ -137,8 +132,8 @@ onMounted(() => {
           <template v-for="conv in filteredConversations().filter(c => c.pinned)" :key="conv.id">
             <div 
               class="conversation-item pinned" 
-              :class="{ active: conv.id === currentId }"
-              @click="emit('select', conv.id)"
+              :class="{ active: conv.id === conversationId }"
+              @click="conversationId = conv.id"
             >
               <el-icon class="pin-icon"><StarFilled /></el-icon>
               <div class="conv-content">
@@ -156,8 +151,8 @@ onMounted(() => {
           <template v-for="conv in filteredConversations().filter(c => !c.pinned)" :key="conv.id">
             <div 
               class="conversation-item" 
-              :class="{ active: conv.id === currentId }"
-              @click="emit('select', conv.id)"
+              :class="{ active: conv.id === conversationId }"
+              @click="conversationId = conv.id"
             >
               <el-icon class="conv-icon"><ChatDotRound /></el-icon>
               <div class="conv-content">

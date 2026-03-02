@@ -9,6 +9,9 @@ import { Monitor, Loading, User, ArrowDown, Cpu, MagicStick, Box, Aim, ZoomIn, V
 import AttackChainView from './AttackChainView.vue';
 import McpCallDialog from "./McpCallDialog.vue";
 
+import { storeToRefs } from 'pinia';
+import ConversationStore from "@/store/Conversation";
+
 const md = new MarkdownIt();
 
 // 调用序列项
@@ -39,14 +42,13 @@ interface Message {
   mcpCalls?: any[];
 }
 
-const props = defineProps<{
-  conversationId?: string;
-}>();
+const store = ConversationStore();
+const { conversationId: currentConversationId } = storeToRefs(store);
 
 const input = ref('');
 let messages = reactive<Message[]>([]);
 const loading = ref(false);
-const currentConversationId = ref<string | undefined>(props.conversationId);
+// const currentConversationId = ref<string | undefined>(props.conversationId);
 const currentTaskId = ref<string | undefined>(undefined);
 const progressTitle = ref<string>('');
 const messagesContainer = ref<HTMLElement | null>(null);
@@ -158,8 +160,8 @@ const loadConversationHistory = async (conversationId: string) => {
   }
 };
 
-// 监听 prop 变化，加载历史消息
-watch(() => props.conversationId, async (newId) => {
+// 监听 conversationId 变化，加载历史消息
+watch(() => currentConversationId.value, async (newId) => {
   messages.splice(0);
   if(newId) {
     currentConversationId.value = newId;
@@ -543,7 +545,6 @@ const renderMarkdown = (text: string | undefined) => {
   flex-direction: column;
   height: calc(100vh - 94px);
   max-width: 1200px;
-  margin: 0 auto;
   border: 1px solid var(--el-border-color);
   border-radius: 8px;
   background: var(--el-bg-color);

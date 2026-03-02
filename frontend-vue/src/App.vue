@@ -1,16 +1,4 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import ChatWindow from './components/ChatWindow.vue';
-import Sidebar from './components/Sidebar.vue';
-import ToolsPanel from './components/ToolsPanel.vue';
-import ConfigView from './components/ConfigView.vue';
-import RolesView from './components/RolesView.vue';
-import BatchQueueView from './components/BatchQueueView.vue';
-import KnowledgeView from './components/KnowledgeView.vue';
-import VulnsView from './components/VulnsView.vue';
-// import MonitorView from './components/MonitorView.vue';
-import McpView from './components/McpView.vue';
-import MCPMonitor from './components/MCPMonitor.vue';
 import { 
   Setting, 
   // Monitor, 
@@ -23,42 +11,10 @@ import {
   Platform,
   House
 } from '@element-plus/icons-vue';
+import Sidebar from './components/Sidebar.vue';
+import { useRoute } from 'vue-router';
 
-const currentConversationId = ref<string | undefined>();
-const showToolsPanel = ref(false);
-const currentView = ref<'chat' | 'config' | 'roles' | 'batch' | 'vulns' | 'knowledge' | 'mcp' | 'mcpMonitor'>('chat');
-
-const currentViewName = computed(() => {
-  return {
-    chat: 'CyberStrikeAI',
-    batch: '批量任务管理',
-    knowledge: '知识库管理',
-    config: '系统设置',
-    mcpMonitor: 'MCP监控',
-    mcp: 'MCP管理',
-    roles: '角色管理',
-    vulns: '漏洞管理'
-  }[currentView.value];
-});
-
-const handleSelectConversation = (id: string) => {
-  currentConversationId.value = id;
-  showToolsPanel.value = false;
-  currentView.value = 'chat';
-};
-
-const handleCreateConversation = () => {
-  currentView.value = 'chat';
-};
-
-// const toggleToolsPanel = () => {
-//   showToolsPanel.value = !showToolsPanel.value;
-// };
-
-const handleViewConv = (id: string) => {
-  currentConversationId.value = id;
-  currentView.value = 'chat';
-}
+const route = useRoute();
 </script>
 
 <template>
@@ -70,48 +26,44 @@ const handleViewConv = (id: string) => {
         <span class="logo-text">CS</span>
       </div>
       
-      <el-menu mode="vertical">
-        <el-menu-item index="1" @click="currentView = 'chat'">
+      <el-menu mode="vertical" router :default-active="route.path">
+        <el-menu-item index="/chat">
           <el-icon><ChatDotRound /></el-icon>
           <span class="nav-label">对话</span>
         </el-menu-item>
-        <el-menu-item index="2" @click="currentView = 'batch'">
+        <el-menu-item index="/task">
           <el-icon><VideoPlay /></el-icon>
           <span class="nav-label">任务</span>
         </el-menu-item>
-        <el-menu-item index="3" @click="currentView = 'knowledge'">
+        <el-menu-item index="/knowledge">
           <el-icon><Collection /></el-icon>
           <span class="nav-label">知识</span>
         </el-menu-item>
-        <el-menu-item index="4" @click="currentView = 'roles'">
+        <el-menu-item index="/role">
           <el-icon><User /></el-icon>
           <span class="nav-label">角色</span>
         </el-menu-item>
-        <el-menu-item index="5" @click="currentView = 'vulns'">
+        <el-menu-item index="/vuln">
           <el-icon><Warning /></el-icon>
           <span class="nav-label">漏洞</span>
         </el-menu-item>
-        <!-- <el-menu-item index="6" @click="currentView = 'monitor'">
-          <el-icon><Monitor /></el-icon>
-          <span class="nav-label">监控</span>
-        </el-menu-item> -->
-        <el-sub-menu index="6">
+        <el-sub-menu index="mcp">
           <template #title>
             <el-icon><Connection /></el-icon>
             <span class="nav-label">MCP</span>
           </template>
           <el-menu-item-group>
-            <el-menu-item index="7-1" @click="currentView = 'mcpMonitor'">
+            <el-menu-item index="/mcp-monitor">
               <el-icon><Platform /></el-icon>
               <span class="nav-label">MCP监控</span>
             </el-menu-item>
-            <el-menu-item index="7-2" @click="currentView = 'mcp'">
+            <el-menu-item index="/mcp-manage">
               <el-icon><House /></el-icon>
               <span class="nav-label">MCP管理</span>
             </el-menu-item>
           </el-menu-item-group>
         </el-sub-menu>
-        <el-menu-item index="7" @click="currentView = 'config'">
+        <el-menu-item index="/config">
           <el-icon><Setting /></el-icon>
           <span class="nav-label">设置</span>
         </el-menu-item>
@@ -119,12 +71,8 @@ const handleViewConv = (id: string) => {
     </nav>
 
     <!-- Secondary Sidebar (Contextual) -->
-    <aside class="app-sidebar" v-if="currentView === 'chat'">
-      <Sidebar 
-        :current-id="currentConversationId" 
-        @select="handleSelectConversation"
-        @create="handleCreateConversation"
-      />
+    <aside class="app-sidebar" v-if="route.name === 'CyberStrikeAI'">
+      <Sidebar />
     </aside>
     
     <!-- Main Content Area -->
@@ -132,80 +80,16 @@ const handleViewConv = (id: string) => {
       <!-- Header -->
       <header class="app-header">
         <div class="header-left">
-          <h2>{{ currentViewName }}</h2>
+          <h2>{{ route.name }}</h2>
         </div>
-        <!-- <div class="header-right">
-          <el-button 
-            v-if="currentView === 'chat'"
-            :icon="Tools" 
-            @click="toggleToolsPanel" 
-            :type="showToolsPanel ? 'primary' : 'default'"
-          >
-            工具列表
-          </el-button>
-        </div> -->
       </header>
       
       <!-- Content -->
       <main class="app-content">
         <div class="content-wrapper">
-          <template v-if="currentView === 'config'">
-            <div class="full-area">
-              <ConfigView />
-            </div>
-          </template>
-
-          <template v-else-if="currentView === 'roles'">
-            <div class="full-area">
-              <RolesView />
-            </div>
-          </template>
-
-          <template v-else-if="currentView === 'batch'">
-            <div class="full-area">
-              <BatchQueueView @view-conv="handleViewConv" />
-            </div>
-          </template>
-
-          <template v-else-if="currentView === 'knowledge'">
-            <div class="full-area">
-              <KnowledgeView />
-            </div>
-          </template>
-
-          <template v-else-if="currentView === 'vulns'">
-            <div class="full-area">
-              <VulnsView />
-            </div>
-          </template>
-
-          <!-- <template v-else-if="currentView === 'monitor'">
-            <div class="full-area">
-              <MonitorView />
-            </div>
-          </template> -->
-
-          <template v-else-if="currentView === 'mcp'">
-            <div class="full-area">
-              <McpView />
-            </div>
-          </template>
-
-          <template v-else-if="currentView === 'mcpMonitor'">
-            <div class="full-area">
-              <MCPMonitor />
-            </div>
-          </template>
-          
-          <template v-else>
-            <div class="chat-area" :class="{ 'with-panel': showToolsPanel }">
-              <ChatWindow :conversation-id="currentConversationId" />
-            </div>
-            
-            <div v-if="showToolsPanel" class="tools-area">
-              <ToolsPanel />
-            </div>
-          </template>
+          <div class="full-area">
+            <router-view />
+          </div>
         </div>
       </main>
     </div>

@@ -1,0 +1,53 @@
+import { createRouter, createWebHashHistory } from "vue-router";
+
+const router = createRouter({
+  routes: [
+    {
+      path: '/',
+      redirect: '/chat'
+    },
+    {
+      name: 'CyberStrikeAI',
+      path: '/chat',
+      component: () => import('./components/ChatWindow.vue')
+    },
+    {
+      name: '任务管理',
+      path: '/task',
+      component: () => import('./components/BatchQueueView.vue')
+    },
+    {
+      name: '知识库管理',
+      path: '/knowledge',
+      component: () => import('./components/KnowledgeView.vue')
+    },
+    {
+      name: '角色管理',
+      path: '/role',
+      component: () => import('./components/RolesView.vue')
+    },
+    {
+      name: '漏洞管理',
+      path: '/vuln',
+      component: () => import('./components/VulnsView.vue')
+    },
+    {
+      name: 'MCP监控',
+      path: '/mcp-monitor',
+      component: () => import('./components/MCPMonitor.vue')
+    },
+    {
+      name: 'MCP管理',
+      path: '/mcp-manage',
+      component: () => import('./components/McpView.vue')
+    },
+    {
+      name: '系统设置',
+      path: '/config',
+      component: () => import('./components/ConfigView.vue')
+    },
+  ],
+  history: createWebHashHistory()
+});
+
+export default router;
