@@ -202,6 +202,7 @@ const sendMessage = async () => {
   });
   
   messages.push({
+    id: Date.now().toString(),
     role: 'assistant',
     timestamp: Date.now(),
     content: '',
@@ -213,7 +214,7 @@ const sendMessage = async () => {
   let streamingConversatinoId: string | undefined = currentConversationId.value;
   // Initial assistant placeholder tracking
   streamChat(userMsg, {
-    onMessage: (content, type, data) => {
+    onMessage: (id, content, type, data) => {
       // 流式输出的对话Id和当前对话Id不一致时，不会输出对话
       if (currentConversationId.value !== streamingConversatinoId) {
         return;
@@ -225,17 +226,19 @@ const sendMessage = async () => {
       const title = getTitleByType(type, data, content);
       const createdAt = formatDate(new Date());
       // 保存任务ID
-      if (type === 'task_started' && data?.taskId) {
-        currentTaskId.value = data.taskId;
-        streamingConversatinoId = data.conversationId;
-      } else if (type === 'conversation') {
+      // if (type === 'task_started' && data?.taskId) {
+      //   currentTaskId.value = data.taskId;
+      //   streamingConversatinoId = data.conversationId;
+      // } else 
+      if (type === 'conversation') {
         if (data && data.taskId && data.conversationId) {
           currentTaskId.value = data.taskId;
           streamingConversatinoId = data.conversationId;
           progressTitle.value = '🔍 渗透测试进行中...';
         }
-      } else if (type === 'iteration') {
+      } else if (['iteration', 'thinking', 'tool_calls_detected'].includes(type)) {
         lastMessage.timelineItems.push({
+          id,
           type,
           createdAt,
           title,
@@ -243,6 +246,7 @@ const sendMessage = async () => {
         });
       } else if (type === 'cancelled') {
         lastMessage.timelineItems.push({
+          id,
           type,
           createdAt,
           title,
@@ -254,22 +258,9 @@ const sendMessage = async () => {
         toggleTimeline(lastMessage);
       } else if (type === 'progress') {
         progressTitle.value = content;
-      } else if (type === 'thinking') {
-        lastMessage.timelineItems.push({
-          type,
-          createdAt,
-          title,
-          content
-        });
-      } else if (type === 'tool_calls_detected') {
-        lastMessage.timelineItems.push({
-          type,
-          createdAt,
-          title,
-          content
-        });
       } else if (type === 'tool_call') {
         lastMessage.timelineItems.push({
+          id,
           type,
           createdAt,
           title,
@@ -283,10 +274,12 @@ const sendMessage = async () => {
           type,
           createdAt,
           title,
-          content
+          content,
+          resultStatus: data.resultStatus
         });
       } else if (type === 'error') {
         lastMessage.timelineItems.push({
+          id,
           type,
           createdAt,
           title,
@@ -353,23 +346,25 @@ const showMcpCall = (messageId: string | undefined, id: string) => {
     const timelineItems = message.timelineItems || [];
     const i = timelineItems.findIndex(item => item.id === id);
     if (i !== -1) {
-      const call = timelineItems[i];
-      const result = timelineItems[i + 1];
+      const toolCall = timelineItems[i];
+      const toolResult = timelineItems[i + 1];
       let parsedContent: string;
       try {
-        parsedContent = JSON.stringify(JSON.parse(result.content || ''), null, 2);
+        parsedContent = JSON.stringify(JSON.parse(toolResult.content || ''), null, 2);
       } catch (error) {
-        parsedContent = result.content || '';
+        parsedContent = toolResult.content || '';
       }
       mcpCallDetail.value = {
-        id: call.id,
-        createdAt: call.createdAt,
-        args: call.args,
-        resultStatus: result.resultStatus,
-        mcpExecutionIds: call.mcpExecutionIds,
-        content: result.content,
+        id: toolCall.id,
+        createdAt: toolCall.createdAt,
+        args: toolCall.args,
+        resultStatus: toolResult.resultStatus,
+        mcpExecutionIds: toolCall.functionName,
+        content: toolResult.content,
         parsedContent
       };
+    } else {
+      mcpCallDetail.value = {};
     }
   }
 };
@@ -436,7 +431,7 @@ const renderMarkdown = (text: string | undefined) => {
                   </div>
                   <div v-else-if="type === 'tool_result'" class="tool-section">
                     <strong>执行结果:</strong>
-                    <pre class="tool-result">{{ escapeHtml(content || '') }}</pre>
+                    <pre class="tool-result">{{ content }}</pre>
                     <div v-if="id" class="tool-execution-id">
                       执行ID: <code>{{ escapeHtml(id) }}</code>
                     </div>
@@ -701,6 +696,12 @@ const renderMarkdown = (text: string | undefined) => {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+
+    .el-button {
+      +.el-button {
+        margin-left: 0;
+      }
+    }
   }
 }
 
