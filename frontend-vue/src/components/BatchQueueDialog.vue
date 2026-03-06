@@ -98,6 +98,7 @@ import { ref, useTemplateRef, watch } from 'vue';
 import { BatchTask, BatchQueue } from './BatchQueueView.vue';
 import { dayjs, ElMessage, ElMessageBox, FormContext, FormRules } from 'element-plus';
 import { useRouter } from 'vue-router';
+import ChatStore from "@/store/Chat";
 
 const props = defineProps<{
   visible: boolean;
@@ -123,7 +124,7 @@ const batchQueueInfo = ref<BatchQueue>({
     ready: 0,
     running: 0,
     completed: 0,
-    failed: 0,
+    error: 0,
     progress: 0
   }
 });
@@ -139,6 +140,8 @@ const rules = ref<FormRules>({
     message: '任务消息不能为空'
   }
 });
+
+const store = ChatStore();
 
 watch(() => props, (val) => {
   visible.value = val.visible;
@@ -162,7 +165,7 @@ const onOpen = async () => {
       ready: 0,
       running: 0,
       completed: 0,
-      failed: 0,
+      error: 0,
       progress: 0
     }
   };
@@ -179,32 +182,7 @@ const getBatchQueueInfo = async () => {
   const res = await fetch(`/api/batch-tasks/${props.batchQueueId}`);
   if (res.ok) {
     const response: BatchQueue = await res.json();
-    const queueStatusMap: Record<string, Record<'label' | 'elType', string>> = {
-      pending: {
-        label: '待执行',
-        elType: 'info'
-      },
-      running: {
-        label: '执行中',
-        elType: 'primary'
-      },
-      completed: {
-        label: '已完成',
-        elType: 'success'
-      },
-      cancelled: {
-        label: '已取消',
-        elType: 'info'
-      },
-      puased: {
-        label: '已暂停',
-        elType: 'warning'
-      },
-      failed: {
-        label: '失败',
-        elType: 'danger'
-      },
-    };
+    const queueStatusMap: Record<string, Record<'label' | 'elType', string>> = store.queueStatusMap;
     const { label, elType } = queueStatusMap[response.status];
     response.statusLabel = label;
     response.statusElType = elType;

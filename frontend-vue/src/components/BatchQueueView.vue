@@ -3,12 +3,13 @@ import { ref, onMounted, useTemplateRef } from 'vue';
 import { dayjs, ElMessage, ElMessageBox, FormContext, FormRules } from 'element-plus';
 import { Plus } from '@element-plus/icons-vue';
 import BatchQueueDialog from './BatchQueueDialog.vue';
+import ChatStore from "@/store/Chat";
 
 export interface BatchTask {
   id: string;
   message: string;
   conversationId: string;
-  status: 'pending' | 'running' | 'failed' | 'completed' | 'cancelled';
+  status: 'pending' | 'running' | 'error' | 'completed' | 'cancelled';
   statusLabel?: string;
   statusElType?: string;
   startedAt: string;
@@ -22,7 +23,7 @@ interface BatchStats {
   ready: number;
   running: number;
   completed: number;
-  failed: number;
+  error: number;
   progress: number;
 }
 
@@ -102,6 +103,8 @@ const formRef = useTemplateRef<FormContext>('form');
 const batchQueueDialogVisible = ref(false);
 const batchQueueId = ref('');
 
+const store = ChatStore();
+
 const getRoles = async () => {
   const res = await fetch('/api/roles');
   if (res.ok) {
@@ -133,43 +136,18 @@ const fetchQueues = async (reset: boolean = false) => {
 
   const res = await fetch(`/api/batch-tasks?${query}`);
   if (res.ok) {
-    const queueStatusMap: Record<string, Record<'label' | 'elType', string>> = {
-      pending: {
-        label: '待执行',
-        elType: 'info'
-      },
-      running: {
-        label: '执行中',
-        elType: 'primary'
-      },
-      completed: {
-        label: '已完成',
-        elType: 'success'
-      },
-      cancelled: {
-        label: '已取消',
-        elType: 'info'
-      },
-      puased: {
-        label: '已暂停',
-        elType: 'warning'
-      },
-      failed: {
-        label: '失败',
-        elType: 'danger'
-      },
-    };
+    const queueStatusMap: Record<string, Record<'label' | 'elType', string>> = store.queueStatusMap;
     const response = await res.json();
     queues.value = response.data;
     total.value = response.total;
     queues.value.forEach(q => {
-      const { label, elType } = queueStatusMap[q.status];
+      const { label, elType } = queueStatusMap[q.status] || {};
       q.statusLabel = label;
       q.statusElType = elType;
       q.createdAt = q.createdAt ? dayjs(q.createdAt).format('YYYY-MM-DD HH:mm:ss') : '';
       q.startedAt = q.startedAt ? dayjs(q.startedAt).format('YYYY-MM-DD HH:mm:ss') : '';
       q.completedAt = q.completedAt ? dayjs(q.completedAt).format('YYYY-MM-DD HH:mm:ss') : '';
-      let total = 0, ready = 0, running = 0, completed = 0, failed = 0;
+      let total = 0, ready = 0, running = 0, completed = 0, error = 0;
       q.tasks.forEach(t => {
         total++;
         if (t.status === 'pending') {
@@ -178,8 +156,8 @@ const fetchQueues = async (reset: boolean = false) => {
           running++;
         } else if (t.status === 'completed') {
           completed++;
-        } else if (t.status === 'failed') {
-          failed++;
+        } else if (t.status === 'error') {
+          error++;
         }
       });
       q.batchStats = {
@@ -187,7 +165,7 @@ const fetchQueues = async (reset: boolean = false) => {
         ready,
         running,
         completed,
-        failed,
+        error,
         progress: total !== 0 ? completed / total * 100 : 0
       };
     });
@@ -318,7 +296,7 @@ onMounted(() => {
             <span>待执行: {{ queue.batchStats.ready }}</span>
             <span>执行中: {{ queue.batchStats.running }}</span>
             <span>已完成: {{ queue.batchStats.completed }}</span>
-            <span>失败: {{ queue.batchStats.failed }}</span>
+            <span>失败: {{ queue.batchStats.error }}</span>
           </div>
         </div>
         <el-pagination v-model:current-page="pageNum" :page-size="pageSize" background
