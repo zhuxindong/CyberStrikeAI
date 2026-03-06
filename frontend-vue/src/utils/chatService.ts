@@ -1,6 +1,7 @@
 export interface StreamCallbacks {
     onMessage: (id: string, content: string, type: string, extraData?: any) => void;
-    onError: (error: any) => void;
+    onCancell: () => void;
+    onError: () => void;
     onDone: () => void;
 }
 
@@ -10,61 +11,60 @@ export async function streamChat(
     conversationId?: string,
     role?: string
 ) {
-    try {
-        const response = await fetch("/api/agent-loop/stream", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                message,
-                conversationId,
-                role
-            }),
-        });
+    const response = await fetch("/api/agent-loop/stream", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            message,
+            conversationId,
+            role
+        }),
+    });
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
 
-        if (!response.body) {
-            throw new Error("Response body is null");
-        }
+    if (!response.body) {
+        throw new Error("Response body is null");
+    }
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
 
-        while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
+    while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
 
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n\n");
-            // Keep the last part if it's incomplete
-            buffer = lines.pop() || "";
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        // Keep the last part if it's incomplete
+        buffer = lines.pop() || "";
 
-            for (const line of lines) {
-                if (line.startsWith("data:")) {
-                    let jsonStr = line.substring(5).trim();
-                    if (jsonStr) {
-                        try {
-                            const event = JSON.parse(jsonStr);
-                            // Backend format: { type, message, data }
-                            // data is a JSON object itself or string
-                            if (event.type === "done" || event.type === 'cancelled') {
-                                callbacks.onDone();
-                                return;
-                            }
-                            callbacks.onMessage(event.id, event.message, event.type, event.data);
-                        } catch (e) {
-                            console.error("Error parsing SSE JSON", e, jsonStr);
+        for (const line of lines) {
+            if (line.startsWith("data:")) {
+                let jsonStr = line.substring(5).trim();
+                if (jsonStr) {
+                    try {
+                        const event = JSON.parse(jsonStr);
+                        // Backend format: { type, message, data }
+                        // data is a JSON object itself or string
+                        callbacks.onMessage(event.id, event.message, event.type, event.data);
+                        if (event.type === "done") {
+                            callbacks.onDone();
+                        } else if (event.type === 'cancelled') {
+                            callbacks.onCancell();
+                        } else if (event.type === 'error') {
+                            callbacks.onError();
                         }
+                    } catch (e) {
+                        console.error("Error parsing SSE JSON", e, jsonStr);
                     }
                 }
             }
         }
-    } catch (error) {
-        callbacks.onError(error);
     }
 }
