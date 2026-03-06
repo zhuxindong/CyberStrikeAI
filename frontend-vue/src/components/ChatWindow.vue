@@ -2,8 +2,8 @@
 import { ref, nextTick, watch, onMounted, reactive } from 'vue';
 import { streamChat } from '../utils/chatService';
 import { escapeHtml } from '../utils/escape';
-import { formatDate } from '../utils/date';
 import MarkdownIt from 'markdown-it';
+import { dayjs, ElMessage } from 'element-plus';
 import 'element-plus/theme-chalk/display.css';
 import { Monitor, Loading, User, ArrowDown, Cpu, MagicStick, Box, Aim, ZoomIn, View, Cloudy, Check } from '@element-plus/icons-vue';
 import AttackChainView from './AttackChainView.vue';
@@ -11,6 +11,7 @@ import McpCallDialog from "./McpCallDialog.vue";
 
 import { storeToRefs } from 'pinia';
 import ConversationStore from "@/store/Conversation";
+import { useRoute } from 'vue-router';
 
 const md = new MarkdownIt();
 
@@ -42,11 +43,8 @@ interface Message {
   mcpCalls?: any[];
 }
 
-const store = ConversationStore();
-const { conversationId: currentConversationId } = storeToRefs(store);
-
 const input = ref('');
-let messages = reactive<Message[]>([]);
+const messages = reactive<Message[]>([]);
 const loading = ref(false);
 // const currentConversationId = ref<string | undefined>(props.conversationId);
 const currentTaskId = ref<string | undefined>(undefined);
@@ -54,7 +52,10 @@ const progressTitle = ref<string>('');
 const messagesContainer = ref<HTMLElement | null>(null);
 const showAttackChain = ref(false);
 const mcpCallDialogVisible = ref<boolean>(false);
-const mcpCallDetail = ref<any>({});
+const mcpCallDetail = ref<unknown>({});
+
+const store = ConversationStore();
+const { conversationId: currentConversationId } = storeToRefs(store);
 
 // Role Management
 const roleIcons: Record<string, any> = {
@@ -141,8 +142,8 @@ const loadConversationHistory = async (conversationId: string) => {
           if (msg.role === 'assistant') {
             item.timelineItems = msg.messageList.map((item: any) => {
               item.title = getTitleByType(item.type, item);
-              item.createdAt = formatDate(item.createdAt);
-              item.args = item.dataJson ? JSON.parse(item.dataJson).arguments : '';
+              item.createdAt = dayjs(item.createdAt).format('YYYY-MM-DD HH:mm:ss');
+              item.args = item.dataJson ? JSON.stringify(JSON.parse(item.dataJson).arguments, null, 2) : '';
               return item;
             });
             generateMCPCalls(item);
@@ -152,9 +153,11 @@ const loadConversationHistory = async (conversationId: string) => {
         });
         await scrollToBottom();
       }
+    } else if (response.status === 404) {
+      ElMessage.error('对话不存在');
+    } else {
+      ElMessage.error('加载对话历史失败');
     }
-  } catch (error) {
-    console.error('Failed to load conversation history:', error);
   } finally {
     loading.value = false;
   }
@@ -162,14 +165,21 @@ const loadConversationHistory = async (conversationId: string) => {
 
 // 监听 conversationId 变化，加载历史消息
 watch(() => currentConversationId.value, async (newId) => {
-  messages.splice(0);
-  if(newId) {
-    currentConversationId.value = newId;
-    await loadConversationHistory(newId);
+    if(newId) {
+        await loadConversationHistory(newId);
   }
-}, { immediate: true });
+});
 
+const route = useRoute();
 onMounted(() => {
+  const { conversationId } = route.query || {};
+  if (conversationId) {
+    if (conversationId == currentConversationId.value) {
+      loadConversationHistory(conversationId);
+    } else {
+      currentConversationId.value = conversationId as string;
+    }
+  }
   fetchRoles();
 });
 
@@ -226,7 +236,7 @@ const sendMessage = async () => {
       lastMessage.expanded = true;
       lastMessage.timelineItems = lastMessage.timelineItems || [];
       const title = getTitleByType(type, data, content);
-      const createdAt = formatDate(new Date());
+      const createdAt = dayjs(new Date()).format('YYYY-MM-DD HH:mm:ss');
       // 保存任务ID
       // if (type === 'task_started' && data?.taskId) {
       //   currentTaskId.value = data.taskId;
@@ -268,7 +278,7 @@ const sendMessage = async () => {
           title,
           content,
           functionName: data.toolName,
-          args: data.arguments
+          args: JSON.stringify(data.arguments, null, 2)
         });
       } else if (type === 'tool_result') {
         lastMessage.timelineItems.push({
@@ -299,7 +309,7 @@ const sendMessage = async () => {
       console.error(err);
       const lastMessage: Message = messages[messages.length - 1];
       const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
-      lastMessage.content = timelineItems[timelineItems.length - 1].content;
+      lastMessage.content = timelineItems[timelineItems.length - 1]?.content;
       loading.value = false;
       progressTitle.value = '❌ 执行失败';
       scrollToBottom();
@@ -427,7 +437,7 @@ const renderMarkdown = (text: string | undefined) => {
                     <div class="tool-details">
                       <div class="tool-arg-section">
                         <strong>参数:</strong>
-                        <pre class="tool-args">{{ escapeHtml(JSON.stringify(args, null, 2)) }}</pre>
+                        <pre class="tool-args">{{ escapeHtml(args) }}</pre>
                       </div>
                     </div>
                   </div>
@@ -541,6 +551,7 @@ const renderMarkdown = (text: string | undefined) => {
 
 <style lang="scss" scoped>
 .chat-container {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: calc(100vh - 94px);
@@ -548,6 +559,63 @@ const renderMarkdown = (text: string | undefined) => {
   border: 1px solid var(--el-border-color);
   border-radius: 8px;
   background: var(--el-bg-color);
+}
+
+.active-tasks {
+  position: absolute;
+  width: 100%;
+  padding: 8px;
+
+  .task-container {
+    display: flex;
+  }
+
+  .active-task-item {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: var(--bg-primary);
+    border: 1px solid rgba(0, 102, 255, 0.2);
+    border-radius: 8px;
+    padding: 8px 12px;
+    flex-shrink: 0;
+    min-width: 280px;
+    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.03);
+    margin-right: 12px;
+    margin-bottom: 12px;
+  }
+
+  .active-task-status {
+    background: rgba(0, 102, 255, 0.12);
+    color: var(--accent-color);
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .active-task-message {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 320px;
+  }
+
+  .active-task-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .active-task-time {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
 }
 
 .messages-area {

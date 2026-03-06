@@ -30,3 +30,13 @@ body {
   width: 100%;
   height: 100vh;
 }
+
+.el-textarea__inner {
+  resize: none;
+}
+
+.el-form--inline {
+  .el-form-item {
+    margin-right: 12px;
+  }
+}

@@ -26,11 +26,11 @@
     <div class="detail-section">
       <div class="detail-section-header">
         <h3>请求参数</h3>
-        <el-button size="small" type="primary" @click="copyText(JSON.stringify(detail.args, null, 2))">复制
+        <el-button size="small" type="primary" @click="copyText(detail.args)">复制
           JSON</el-button>
       </div>
       <div class="detail-code-card">
-        <pre id="detail-request" class="code-block">{{ JSON.stringify(detail.args, null, 2) }}</pre>
+        <pre id="detail-request" class="code-block">{{ detail.args }}</pre>
       </div>
     </div>
     <div class="detail-section">

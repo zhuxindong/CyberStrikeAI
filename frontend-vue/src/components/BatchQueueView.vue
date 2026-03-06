@@ -1,249 +1,347 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import { Plus, VideoPlay, VideoPause, Refresh, List } from '@element-plus/icons-vue';
+import { ref, onMounted, useTemplateRef } from 'vue';
+import { dayjs, ElMessage, ElMessageBox, FormContext, FormRules } from 'element-plus';
+import { Plus } from '@element-plus/icons-vue';
+import BatchQueueDialog from './BatchQueueDialog.vue';
 
-interface BatchTask {
+export interface BatchTask {
   id: string;
   message: string;
   conversationId: string;
-  status: string;
+  status: 'pending' | 'running' | 'failed' | 'completed' | 'cancelled';
+  statusLabel?: string;
+  statusElType?: string;
   startedAt: string;
   completedAt: string;
   result: string;
   error: string;
 }
 
-interface BatchQueue {
+interface BatchStats {
+  total: number;
+  ready: number;
+  running: number;
+  completed: number;
+  failed: number;
+  progress: number;
+}
+
+export interface BatchQueue {
   id: string;
   title: string;
-  status: string;
+  status: 'pending' | 'running' | 'paused' | 'completed' | 'cancelled' | '';
+  statusLabel?: string;
+  statusElType?: string;
   role: string;
   createdAt: string;
   startedAt: string;
   completedAt: string;
   currentIndex: number;
   tasks: BatchTask[];
+  batchStats: BatchStats;
 }
 
+const pageNum = ref(1);
+const pageSize = ref(10);
+const total = ref(0);
 const queues = ref<BatchQueue[]>([]);
-const currentQueue = ref<BatchQueue | null>(null);
+const status = ref('');
+const statusOptions = ref([
+  {
+    label: '待执行',
+    value: 'pending'
+  },
+  {
+    label: '执行中',
+    value: 'running'
+  },
+  {
+    label: '已暂停',
+    value: 'paused'
+  },
+  {
+    label: '已完成',
+    value: 'completed'
+  },
+  {
+    label: '已取消',
+    value: 'cancelled'
+  }
+]);
+const timeRange = ref<string[]>();
+const keyword = ref('');
+
 const dialogVisible = ref(false);
+const roleOptions = ref<{ label: string; value: string }[]>([]);
 const form = ref({
   title: '',
   role: '',
   tasksText: ''
 });
-
-const fetchQueues = async () => {
-  try {
-    const res = await fetch('/api/batch-tasks');
-    if (res.ok) {
-      queues.value = await res.json();
+const rules = ref<FormRules>({
+  title: {
+    required: true,
+    message: '请填写标题'
+  },
+  tasksText: {
+    required: true,
+    message: '请输入至少一个任务',
+    validator(_rule, value, cb) {
+      const tasks = value.split('\n').filter((t: string) => t.trim());
+      if (tasks.length === 0) {
+        cb(new Error('没有任何有效任务'));
+        return;
+      } else {
+        cb();
+      }
     }
-  } catch (error) {
-    ElMessage.error('获取任务队列失败');
+  }
+});
+const formRef = useTemplateRef<FormContext>('form');
+
+const batchQueueDialogVisible = ref(false);
+const batchQueueId = ref('');
+
+const getRoles = async () => {
+  const res = await fetch('/api/roles');
+  if (res.ok) {
+    const response = await res.json();
+    roleOptions.value = response.map((r: any) => {
+      return {
+        label: r.name,
+        value: r.name
+      };
+    });
+  } else {
+    ElMessage.error('获取角色列表失败');
+  }
+};
+
+const fetchQueues = async (reset: boolean = false) => {
+  if (reset) {
+    pageNum.value = 1;
+  }
+  let query = '';
+  query += `status=${status.value || ''}`;
+  query += `&keyword=${keyword.value}`;
+  query += `&page=${pageNum.value}`;
+  query += `&size=${pageSize.value}`;
+  if (timeRange.value) {
+    query += `&createdFrom=${timeRange.value[0]}`;
+    query += `&createdTo=${timeRange.value[1]}`;
+  }
+
+  const res = await fetch(`/api/batch-tasks?${query}`);
+  if (res.ok) {
+    const queueStatusMap: Record<string, Record<'label' | 'elType', string>> = {
+      pending: {
+        label: '待执行',
+        elType: 'info'
+      },
+      running: {
+        label: '执行中',
+        elType: 'primary'
+      },
+      completed: {
+        label: '已完成',
+        elType: 'success'
+      },
+      cancelled: {
+        label: '已取消',
+        elType: 'info'
+      },
+      puased: {
+        label: '已暂停',
+        elType: 'warning'
+      },
+      failed: {
+        label: '失败',
+        elType: 'danger'
+      },
+    };
+    const response = await res.json();
+    queues.value = response.data;
+    total.value = response.total;
+    queues.value.forEach(q => {
+      const { label, elType } = queueStatusMap[q.status];
+      q.statusLabel = label;
+      q.statusElType = elType;
+      q.createdAt = q.createdAt ? dayjs(q.createdAt).format('YYYY-MM-DD HH:mm:ss') : '';
+      q.startedAt = q.startedAt ? dayjs(q.startedAt).format('YYYY-MM-DD HH:mm:ss') : '';
+      q.completedAt = q.completedAt ? dayjs(q.completedAt).format('YYYY-MM-DD HH:mm:ss') : '';
+      let total = 0, ready = 0, running = 0, completed = 0, failed = 0;
+      q.tasks.forEach(t => {
+        total++;
+        if (t.status === 'pending') {
+          ready++;
+        } else if (t.status === 'running') {
+          running++;
+        } else if (t.status === 'completed') {
+          completed++;
+        } else if (t.status === 'failed') {
+          failed++;
+        }
+      });
+      q.batchStats = {
+        total,
+        ready,
+        running,
+        completed,
+        failed,
+        progress: total !== 0 ? completed / total * 100 : 0
+      };
+    });
+  } else {
+    ElMessage.error('获取队列列表失败');
   }
 };
 
 const handleCreate = () => {
+  formRef.value?.resetFields();
   form.value = { title: '', role: '', tasksText: '' };
   dialogVisible.value = true;
 };
 
 const handleSubmit = async () => {
-  if (!form.value.title || !form.value.tasksText) {
-    ElMessage.warning('请填写标题和任务列表');
-    return;
-  }
-  
-  const tasks = form.value.tasksText.split('\n').filter(t => t.trim());
-  if (tasks.length === 0) {
-    ElMessage.warning('没有任何有效任务');
-    return;
-  }
-
-  try {
+  const valid = await formRef.value?.validateField();
+  if (valid) {
     const res = await fetch('/api/batch-tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title: form.value.title,
         role: form.value.role,
-        tasks: tasks
+        tasks: form.value.tasksText.split('\n').filter((t: string) => t.trim())
       })
     });
-    
+
     if (res.ok) {
       ElMessage.success('创建成功');
       dialogVisible.value = false;
+      const response = await res.json();
+      batchQueueId.value = response.id;
+      batchQueueDialogVisible.value = true;
       fetchQueues();
+    } else {
+      ElMessage.error('创建失败');
     }
-  } catch (e) {
-    ElMessage.error('创建失败');
   }
 };
 
-const selectQueue = async (queue: BatchQueue) => {
-  try {
-    const res = await fetch(`/api/batch-tasks/${queue.id}`);
-    if (res.ok) {
-      currentQueue.value = await res.json();
+const selectQueue = async (queueId: string) => {
+  batchQueueId.value = queueId;
+  batchQueueDialogVisible.value = true;
+};
+
+const confirmDeleteQueue = (id: string) => {
+  ElMessageBox.confirm('确定删除该队列吗', '删除队列', {
+    type: 'error'
+  }).then(() => {
+    deleteQueue(id);
+  });
+};
+
+const deleteQueue = async (id: string) => {
+  const { ok } = await fetch(`/api/batch-tasks/${id}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-type': 'application/json'
     }
-  } catch (e) {
-    ElMessage.error('获取详情失败');
+  });
+  if (ok) {
+    fetchQueues();
+    ElMessage.success('删除任务队列成功');
+  } else {
+    ElMessage.error('删除任务队列失败');
   }
 };
 
-const startQueue = async (id: string) => {
-  try {
-    await fetch(`/api/batch-tasks/${id}/start`, { method: 'POST' });
-    ElMessage.success('已开始执行');
-    refreshCurrent();
-  } catch (e) {
-    ElMessage.error('启动失败');
-  }
-};
-
-const cancelQueue = async (id: string) => {
-  try {
-    await fetch(`/api/batch-tasks/${id}/cancel`, { method: 'POST' });
-    ElMessage.success('已请求取消');
-    refreshCurrent();
-  } catch (e) {
-     ElMessage.error('取消失败');
-  }
-};
-
-const refreshCurrent = () => {
-  if (currentQueue.value) {
-    selectQueue(currentQueue.value);
-  }
-  fetchQueues();
-};
-
-// Auto refresh if running
-let timer: number | undefined;
 onMounted(() => {
-  fetchQueues();
-  timer = setInterval(() => {
-    if (currentQueue.value && currentQueue.value.status === 'running') {
-      refreshCurrent();
-    }
-  }, 3000);
+  getRoles();
+  fetchQueues(true);
 });
 </script>
 
 <template>
   <div class="batch-view">
-    <!-- 左侧列表 -->
-    <div class="queue-list">
-      <div class="list-header">
-        <h3>批量任务队列</h3>
-        <el-button :icon="Plus" circle size="small" @click="handleCreate"></el-button>
-      </div>
-      <div class="list-content">
-        <div 
-          v-for="q in queues" 
-          :key="q.id" 
-          class="queue-item"
-          :class="{ active: currentQueue?.id === q.id }"
-          @click="selectQueue(q)"
-        >
-          <div class="q-title">{{ q.title }}</div>
-          <div class="q-meta">
-            <el-tag size="small" :type="q.status === 'completed' ? 'success' : q.status === 'running' ? 'primary' : 'info'">
-              {{ q.status }}
-            </el-tag>
-            <span class="q-time">{{ new Date(q.createdAt).toLocaleTimeString() }}</span>
+    <div class="task-actions">
+      <el-button type="primary" @click="handleCreate">
+        <el-icon>
+          <Plus />
+        </el-icon>
+        <span>新建任务</span>
+      </el-button>
+    </div>
+    <!-- 查询条件 -->
+    <div class="task-filters">
+      <el-form label-width="80px" label-position="top" inline>
+        <el-form-item label="状态筛选">
+          <el-select v-model="status" placeholder="请选择" clearable>
+            <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
+       <el-form-item label="创建时间">
+         <el-date-picker v-model="timeRange" type="datetimerange" start-placeholder="请选择创建时间开始时间"
+            end-placeholder="请选择创建时间结束时间" format="YYYY-MM-DD HH:mm:ss" value-format="YYYY-MM-DD HH:mm:ss" />
+        </el-form-item>
+        <el-form-item label="搜索队列ID、标题">
+          <el-input v-model="keyword" placeholder="输入关键字搜索..." />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="fetchQueues(true)">筛选</el-button>
+        </el-form-item>
+      </el-form>
+    </div>
+    <!-- 任务列表 -->
+   <div class="task-list">
+      <template v-if="queues.length">
+        <div class="batch-queue-item" v-for="queue in queues" :key="queue.id" @click="selectQueue(queue.id)">
+          <div class="batch-queue-header">
+            <div class="batch-queue-info">
+              <div class="batch-queue-title">{{ queue.title }}</div>
+              <div class="batch-queue-role">{{ queue.role }}</div>
+              <div class="batch-queue-status">
+                <el-tag :type="queue.statusElType">{{ queue.statusLabel }}</el-tag>
+              </div>
+              <div class="batch-queue-id">队列ID: {{ queue.id }}</div>
+              <div class="batch-queue-time">创建时间: {{ queue.createdAt }}</div>
+            </div>
+            <div class="batch-queue-progress">
+              <el-progress :percentage="queue.batchStats.progress" />
+            </div>
+            <div>
+              <el-button type="danger" @click.stop="confirmDeleteQueue(queue.id)">删除</el-button>
+            </div>
+          </div>
+          <div class="batch-queue-stats">
+            <span>总计: {{ queue.batchStats.total }}</span>
+            <span>待执行: {{ queue.batchStats.ready }}</span>
+            <span>执行中: {{ queue.batchStats.running }}</span>
+            <span>已完成: {{ queue.batchStats.completed }}</span>
+            <span>失败: {{ queue.batchStats.failed }}</span>
           </div>
         </div>
+        <el-pagination v-model:current-page="pageNum" :page-size="pageSize" background
+          layout="->, prev, pager, next, total" :total="total" @change="fetchQueues(false)" />
+      </template>
+      <div v-else class="empty-state">
+        <el-empty description="暂无数据" />
       </div>
-    </div>
-
-    <!-- 右侧详情 -->
-    <div class="queue-detail" v-if="currentQueue">
-      <div class="detail-header">
-        <div class="dh-left">
-          <h2>{{ currentQueue.title }}</h2>
-          <el-tag class="ml-2">{{ currentQueue.status }}</el-tag>
-        </div>
-        <div class="dh-right">
-          <el-button :icon="Refresh" @click="refreshCurrent">刷新</el-button>
-          <el-button 
-            type="success" 
-            :icon="VideoPlay" 
-            v-if="currentQueue.status === 'pending'"
-            @click="startQueue(currentQueue.id)"
-          >
-            开始执行
-          </el-button>
-          <el-button 
-            type="danger" 
-            :icon="VideoPause" 
-            v-if="currentQueue.status === 'running'"
-            @click="cancelQueue(currentQueue.id)"
-          >
-            停止
-          </el-button>
-        </div>
-      </div>
-
-      <div class="detail-stats" v-if="currentQueue.role">
-        <span class="label">指定角色:</span> {{ currentQueue.role }}
-      </div>
-
-      <el-table :data="currentQueue.tasks" style="width: 100%" height="calc(100% - 120px)">
-        <el-table-column type="index" width="50" label="#" />
-        <el-table-column prop="message" label="任务指令" min-width="200" show-overflow-tooltip />
-        <el-table-column label="状态" width="150">
-          <template #default="{ row }">
-             <el-tag 
-               size="small" 
-               :type="row.status === 'completed' ? 'success' : row.status === 'running' ? 'primary' : row.status === 'error' ? 'danger' : 'info'"
-             >
-               {{ row.status }}
-             </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="结果" min-width="200">
-          <template #default="{ row }">
-            <div class="result-cell" v-if="row.result">
-              {{ row.result.substring(0, 100) + (row.result.length > 100 ? '...' : '') }}
-            </div>
-            <div class="error-text" v-else-if="row.error">{{ row.error }}</div>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="100">
-          <template #default="{ row }">
-            <el-button link v-if="row.conversationId" @click="$emit('view-conv', row.conversationId)">
-              查看对话
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </div>
-    
-    <div class="empty-state" v-else>
-      <el-empty description="选择左侧队列查看详情" />
     </div>
 
     <!-- 创建对话框 -->
     <el-dialog v-model="dialogVisible" title="创建批量任务" width="600px">
-      <el-form :model="form" label-width="80px">
-        <el-form-item label="任务标题">
-          <el-input v-model="form.title" placeholder="例如: 批量扫描主机..." />
+      <el-form ref="form" :model="form" :rules="rules" label-width="80px" label-position="top">
+        <el-form-item label="任务标题" prop="title">
+          <el-input v-model.trim="form.title" placeholder="例如: 批量扫描主机..." />
         </el-form-item>
-        <el-form-item label="指定角色">
-          <el-input v-model="form.role" placeholder="可选，例如: red_team" />
+        <el-form-item label="指定角色" prop="role">
+          <el-select v-model="form.role" placeholder="可选">
+            <el-option v-for="role in roleOptions" :key="role.value" :label="role.label" :value="role.value" />
+          </el-select>
         </el-form-item>
-        <el-form-item label="任务列表">
-          <el-input 
-            v-model="form.tasksText" 
-            type="textarea" 
-            :rows="10"
-            placeholder="每行一个任务指令..." 
-          />
+        <el-form-item label="任务列表" prop="tasksText">
+          <el-input v-model.trim="form.tasksText" type="textarea" :rows="10" placeholder="每行一个任务指令..." />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -251,98 +349,127 @@ onMounted(() => {
         <el-button type="primary" @click="handleSubmit">创建</el-button>
       </template>
     </el-dialog>
+    <batch-queue-dialog v-model:visible="batchQueueDialogVisible" :batch-queue-id="batchQueueId" @deleteQueue="deleteQueue" />
   </div>
 </template>
 
-<style scoped>
+<style lang="scss" scoped>
 .batch-view {
-  display: flex;
+  padding: 16px 20px;
   height: 100%;
+  overflow: auto;
+}
+
+.task-actions {
+  display: flex;
+  flex-direction: row-reverse;
+}
+
+.task-filters {
+  display: flex;
   gap: 16px;
-}
-
-.queue-list {
-  width: 250px;
-  border-right: 1px solid var(--el-border-color-light);
-  display: flex;
-  flex-direction: column;
-}
-
-.list-header {
-  padding: 10px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid var(--el-border-color-light);
-}
-
-.list-content {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.queue-item {
-  padding: 12px;
-  cursor: pointer;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-}
-
-.queue-item:hover {
-  background-color: #f5f7fa;
-}
-
-.queue-item.active {
-  background-color: #ecf5ff;
-  border-right: 2px solid var(--el-color-primary);
-}
-
-.q-title {
-  font-weight: 500;
-  margin-bottom: 6px;
-}
-
-.q-meta {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.8rem;
-  color: #909399;
-}
-
-.queue-detail {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 10px;
-}
-
-.detail-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  align-items: flex-end;
   margin-bottom: 16px;
+
+  .el-form {
+    align-items: end;
+  }
+
+  .el-select {
+    width: 150px;
+  }
+
+  .el-input {
+    width: 300px;
+  }
 }
 
-.dh-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.dh-left h2 { margin: 0; }
+.task-list {
+  .batch-queue-item {
+    margin-bottom: 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s ease;
+    cursor: pointer;
 
-.result-cell {
-  font-family: monospace;
-  font-size: 0.9em;
-  color: #606266;
-}
+    &:hover {
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
+      border-color: var(--accent-color);
+    }
+  }
 
-.error-text {
-  color: #f56c6c;
-}
+  .batch-queue-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
 
-.empty-state {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+    .batch-queue-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      flex-wrap: wrap;
+
+      .batch-queue-title {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-right: 8px;
+      }
+
+      .batch-queue-status {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+
+      .batch-queue-id {
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      }
+
+      .batch-queue-time {
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+      }
+    }
+
+    .batch-queue-progress {
+      min-width: 200px;
+    }
+  }
+
+  .batch-queue-stats {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+
+    >span {
+      &:nth-last-child(1) {
+        color: var(--error-color);
+      }
+
+      &:nth-last-child(2) {
+        color: var(--success-color);
+      }
+    }
+  }
+
+  .el-pagination {
+    margin-top: 12px;
+  }
 }
 </style>
