@@ -8,11 +8,12 @@
             <el-button @click="showTask()">添加任务</el-button>
             <el-button @click="startQueue(batchQueueInfo.id)">开始执行</el-button>
           </template>
-          <el-button v-else-if="batchQueueInfo.status === 'paused'">继续执行</el-button>
+          <el-button v-else-if="batchQueueInfo.status === 'paused'"
+            @click="startQueue(batchQueueInfo.id)">继续执行</el-button>
           <template v-else-if="batchQueueInfo.status === 'running'">
             <el-button @click="puaseQueue(batchQueueInfo.id)">暂停队列</el-button>
           </template>
-          <el-button v-if="batchQueueInfo.status !== 'running'" type="danger"
+          <el-button v-if="['pending', 'completed', 'cancelled'].includes(batchQueueInfo.status)" type="danger"
             @click="deleteQueue(batchQueueInfo.id)">删除队列</el-button>
         </div>
       </div>
@@ -60,12 +61,12 @@
       <div class="batch-task-item" v-for="(task, index) in batchQueueInfo.tasks" :key="task.id">
         <div class="batch-task-header">
           <span>
-            <span class="batch-task-index">#{{ index }}</span>
+            <span class="batch-task-index">#{{ index + 1 }}</span>
             <el-tag :type="task.statusElType">{{ task.statusLabel }}</el-tag>
             <span class="batch-task-message">{{ task.message }}</span>
           </span>
           <span>
-            <template v-if="task.status === 'pending'">
+            <template v-if="batchQueueInfo.status === 'pending'">
               <el-button @click="showTask(task)">编辑</el-button>
               <el-button type="danger" @click="deleteTask(task.id)">删除</el-button>
             </template>
@@ -94,11 +95,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, useTemplateRef, watch } from 'vue';
+import { onBeforeUnmount, ref, useTemplateRef, watch } from 'vue';
 import { BatchTask, BatchQueue } from './BatchQueueView.vue';
 import { dayjs, ElMessage, ElMessageBox, FormContext, FormRules } from 'element-plus';
 import { useRouter } from 'vue-router';
 import ChatStore from "@/store/Chat";
+
 
 const props = defineProps<{
   visible: boolean;
@@ -121,10 +123,11 @@ const batchQueueInfo = ref<BatchQueue>({
   tasks: [],
   batchStats: {
     total: 0,
-    ready: 0,
+    pending: 0,
     running: 0,
     completed: 0,
     error: 0,
+    cancelled: 0,
     progress: 0
   }
 });
@@ -162,19 +165,20 @@ const onOpen = async () => {
     tasks: [],
     batchStats: {
       total: 0,
-      ready: 0,
+      pending: 0,
       running: 0,
       completed: 0,
       error: 0,
+      cancelled: 0,
       progress: 0
     }
   };
   await getBatchQueueInfo();
-  toggleIntervalRefresh();
+  startIntervalRefresh();
 };
 
 const onClose = () => {
-  toggleIntervalRefresh();
+  stopIntervalRefresh();
   emits('update:visible', false);
 };
 
@@ -183,14 +187,14 @@ const getBatchQueueInfo = async () => {
   if (res.ok) {
     const response: BatchQueue = await res.json();
     const queueStatusMap: Record<string, Record<'label' | 'elType', string>> = store.queueStatusMap;
-    const { label, elType } = queueStatusMap[response.status];
+    const { label, elType } = queueStatusMap[response.status] || {};
     response.statusLabel = label;
     response.statusElType = elType;
     response.createdAt = response.createdAt ? dayjs(response.createdAt).format('YYYY-MM-DD HH:mm:ss') : '';
     response.startedAt = response.startedAt ? dayjs(response.startedAt).format('YYYY-MM-DD HH:mm:ss') : '';
     response.completedAt = response.completedAt ? dayjs(response.completedAt).format('YYYY-MM-DD HH:mm:ss') : '';
     response.tasks.forEach((t: BatchTask) => {
-      const { label, elType } = queueStatusMap[t.status];
+      const { label, elType } = queueStatusMap[t.status] || {};
       t.statusLabel = label;
       t.statusElType = elType;
       t.startedAt = t.startedAt ? dayjs(t.startedAt).format('YYYY-MM-DD HH:mm:ss') : '';
@@ -203,21 +207,28 @@ const getBatchQueueInfo = async () => {
 };
 
 let timer: NodeJS.Timeout | undefined;
-const toggleIntervalRefresh = () => {
+const startIntervalRefresh = () => {
   if (batchQueueInfo.value.status === 'running' && !timer) {
     timer = setInterval(() => {
       if (batchQueueInfo.value.status === 'running') {
         getBatchQueueInfo();
       } else {
-        clearInterval(timer);
-        timer = undefined;
+        stopIntervalRefresh();
       }
     }, 3000);
-  } else {
+  }
+};
+
+const stopIntervalRefresh = () => {
+  if (timer) {
     clearInterval(timer);
     timer = undefined;
   }
 };
+
+onBeforeUnmount(() => {
+  stopIntervalRefresh();
+});
 
 // 执行队列
 const startQueue = async (id: string) => {
@@ -225,9 +236,7 @@ const startQueue = async (id: string) => {
   if (res.ok) {
     ElMessage.success('已开始执行');
     await getBatchQueueInfo();
-    if (batchQueueInfo.value.status === 'running') {
-      toggleIntervalRefresh();
-    }
+    startIntervalRefresh();
   } else {
     ElMessage.error('启动队列失败');
   }

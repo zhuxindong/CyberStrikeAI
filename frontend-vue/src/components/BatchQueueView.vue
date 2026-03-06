@@ -20,10 +20,11 @@ export interface BatchTask {
 
 interface BatchStats {
   total: number;
-  ready: number;
+  pending: number;
   running: number;
   completed: number;
   error: number;
+  cancelled: number;
   progress: number;
 }
 
@@ -147,26 +148,29 @@ const fetchQueues = async (reset: boolean = false) => {
       q.createdAt = q.createdAt ? dayjs(q.createdAt).format('YYYY-MM-DD HH:mm:ss') : '';
       q.startedAt = q.startedAt ? dayjs(q.startedAt).format('YYYY-MM-DD HH:mm:ss') : '';
       q.completedAt = q.completedAt ? dayjs(q.completedAt).format('YYYY-MM-DD HH:mm:ss') : '';
-      let total = 0, ready = 0, running = 0, completed = 0, error = 0;
+      let total = 0, pending = 0, running = 0, completed = 0, error = 0, cancelled = 0;
       q.tasks.forEach(t => {
         total++;
         if (t.status === 'pending') {
-          ready++;
+          pending++;
         } else if (t.status === 'running') {
           running++;
         } else if (t.status === 'completed') {
           completed++;
         } else if (t.status === 'error') {
           error++;
+        } else if (t.status === 'cancelled') {
+          cancelled++;
         }
       });
       q.batchStats = {
         total,
-        ready,
+        pending,
         running,
         completed,
         error,
-        progress: total !== 0 ? completed / total * 100 : 0
+        cancelled,
+        progress: total !== 0 ? Math.floor((completed + error + cancelled) / total * 100) : 0
       };
     });
   } else {
@@ -277,7 +281,7 @@ onMounted(() => {
           <div class="batch-queue-header">
             <div class="batch-queue-info">
               <div class="batch-queue-title">{{ queue.title }}</div>
-              <div class="batch-queue-role">{{ queue.role }}</div>
+              <div v-if="queue.role" class="batch-queue-role">{{ queue.role }}</div>
               <div class="batch-queue-status">
                 <el-tag :type="queue.statusElType">{{ queue.statusLabel }}</el-tag>
               </div>
@@ -288,12 +292,12 @@ onMounted(() => {
               <el-progress :percentage="queue.batchStats.progress" />
             </div>
             <div>
-              <el-button type="danger" @click.stop="confirmDeleteQueue(queue.id)">删除</el-button>
+              <el-button v-if="['pending', 'completed', 'cancelled'].includes(queue.status)" type="danger" @click.stop="confirmDeleteQueue(queue.id)">删除</el-button>
             </div>
           </div>
           <div class="batch-queue-stats">
             <span>总计: {{ queue.batchStats.total }}</span>
-            <span>待执行: {{ queue.batchStats.ready }}</span>
+            <span>待执行: {{ queue.batchStats.pending }}</span>
             <span>执行中: {{ queue.batchStats.running }}</span>
             <span>已完成: {{ queue.batchStats.completed }}</span>
             <span>失败: {{ queue.batchStats.error }}</span>
@@ -398,13 +402,11 @@ onMounted(() => {
       .batch-queue-title {
         font-weight: 600;
         color: var(--text-primary);
-        margin-right: 8px;
       }
 
       .batch-queue-status {
         display: inline-flex;
         align-items: center;
-        padding: 4px 12px;
         border-radius: 12px;
         font-size: 0.8125rem;
         font-weight: 500;
@@ -414,7 +416,6 @@ onMounted(() => {
       .batch-queue-id {
         font-size: 0.8125rem;
         color: var(--text-secondary);
-        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
       }
 
       .batch-queue-time {
