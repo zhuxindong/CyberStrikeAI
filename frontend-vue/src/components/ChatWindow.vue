@@ -29,6 +29,13 @@ interface TimelineItem {
   resultStatus?: string;
 }
 
+interface Task {
+  id: string;
+  message: string;
+  status: string;
+  time: string;
+}
+
 interface Message {
   id?: string;
   role: 'user' | 'assistant' | 'system';
@@ -45,8 +52,8 @@ interface Message {
 
 const input = ref('');
 const messages = reactive<Message[]>([]);
+const activeTasks = ref<Task[]>([]);
 const loading = ref(false);
-// const currentConversationId = ref<string | undefined>(props.conversationId);
 const currentTaskId = ref<string | undefined>(undefined);
 const progressTitle = ref<string>('');
 const messagesContainer = ref<HTMLElement | null>(null);
@@ -165,8 +172,8 @@ const loadConversationHistory = async (conversationId: string) => {
 
 // 监听 conversationId 变化，加载历史消息
 watch(() => currentConversationId.value, async (newId) => {
-    if(newId) {
-        await loadConversationHistory(newId);
+  if(newId) {
+    await loadConversationHistory(newId);
   }
 });
 
@@ -238,10 +245,6 @@ const sendMessage = async () => {
       const title = getTitleByType(type, data, content);
       const createdAt = dayjs(new Date()).format('YYYY-MM-DD HH:mm:ss');
       // 保存任务ID
-      // if (type === 'task_started' && data?.taskId) {
-      //   currentTaskId.value = data.taskId;
-      //   streamingConversatinoId = data.conversationId;
-      // } else 
       if (type === 'conversation') {
         if (data && data.taskId && data.conversationId) {
           currentTaskId.value = data.taskId;
@@ -264,10 +267,7 @@ const sendMessage = async () => {
           title,
           content
         });
-        loading.value = false;
-        currentTaskId.value = undefined;
         progressTitle.value = '⛔ 任务已取消';
-        toggleTimeline(lastMessage);
       } else if (type === 'progress') {
         progressTitle.value = content;
       } else if (type === 'tool_call') {
@@ -297,16 +297,29 @@ const sendMessage = async () => {
           title,
           content
         });
-        loading.value = false;
         progressTitle.value = '❌ 执行失败';
       }
       scrollToBottom();
     },
-    onError: (err) => {
+    onCancell() {
       if (currentConversationId.value !== streamingConversatinoId) {
         return;
       }
-      console.error(err);
+      const lastMessage: Message = messages[messages.length - 1];
+      const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
+      lastMessage.content = timelineItems[timelineItems.length - 1].content;
+      generateMCPCalls(lastMessage);
+      toggleTimeline(lastMessage);
+      
+      loading.value = false;
+      currentTaskId.value = undefined;
+      progressTitle.value = '⛔ 任务已取消';
+      scrollToBottom();
+    },
+    onError: () => {
+      if (currentConversationId.value !== streamingConversatinoId) {
+        return;
+      }
       const lastMessage: Message = messages[messages.length - 1];
       const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
       lastMessage.content = timelineItems[timelineItems.length - 1]?.content;
@@ -332,15 +345,22 @@ const sendMessage = async () => {
   }, currentConversationId.value, selectedRole.value?.name);
 };
 
-// 停止当前任务
-const stopTask = async () => {
-  if (!currentTaskId.value) return;
+// 停止任务
+const stopTask = async (taskId?: string) => {
+  taskId = taskId || currentTaskId.value;
+  if (!taskId) return;
   try {
-    await fetch('/api/agent-loop/cancel', {
+    const res = await fetch('/api/agent-loop/cancel', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ task_id: currentTaskId.value })
+      body: JSON.stringify({ task_id: taskId })
     });
+    if (res.ok) {
+      const i = activeTasks.value.findIndex(t => t.id === taskId);
+      if (i !== -1) {
+        activeTasks.value.splice(i, 1);
+      }
+    }
   } catch (error) {
     console.error('Failed to cancel task:', error);
   }
@@ -388,6 +408,22 @@ const renderMarkdown = (text: string | undefined) => {
 
 <template>
   <div class="chat-container">
+    <div class="active-tasks">
+      <el-scrollbar>
+        <div class="task-container">
+          <div v-for="task in activeTasks" :key="task.id" class="active-task-item">
+            <div class="active-task-info">
+              <span class="active-task-status">{{ task.status }}</span>
+              <span class="active-task-message">{{ task.message }}</span>
+            </div>
+            <div class="active-task-actions">
+              <span class="active-task-time">{{ task.time }}</span>
+              <el-button type="danger" @click="stopTask(task.id)">停止任务</el-button>
+            </div>
+          </div>
+        </div>
+      </el-scrollbar>
+    </div>
     <div class="messages-area" ref="messagesContainer">
       <div v-if="messages.length === 0" class="empty-state">
         <el-icon :size="64" class="icon"><Monitor /></el-icon>
@@ -411,7 +447,7 @@ const renderMarkdown = (text: string | undefined) => {
             <div v-if="loading && index === messages.length - 1" class="progress-header">
               <span class="progress-title">{{ progressTitle }}</span>
               <div class="progress-actions">
-                  <el-button type="danger" class="progress-stop" @click="stopTask">停止任务</el-button>
+                  <el-button type="danger" class="progress-stop" @click="stopTask()">停止任务</el-button>
                   <el-button @click="toggleTimeline(msg)">{{ msg.expanded ? '收起详情' : '展开详情'}}</el-button>
               </div>
             </div>
@@ -526,7 +562,7 @@ const renderMarkdown = (text: string | undefined) => {
       />
       <div class="button-group">
         <el-button type="primary" :loading="loading" @click="sendMessage" :disabled="loading">发送</el-button>
-        <el-button v-if="loading" type="danger" @click="stopTask">停止</el-button>
+        <el-button v-if="loading" type="danger" @click="stopTask()">停止</el-button>
         <el-button 
           v-if="currentConversationId && !loading" 
           type="warning" 

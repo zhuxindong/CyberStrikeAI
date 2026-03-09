@@ -86,7 +86,6 @@ onMounted(fetchRoles);
 <template>
   <div class="roles-view">
     <div class="page-header">
-      <h2>角色管理</h2>
       <el-button type="primary" :icon="Plus" @click="handleAdd">新建角色</el-button>
     </div>
 
@@ -148,7 +147,7 @@ onMounted(fetchRoles);
 
 .page-header {
   display: flex;
-  justify-content: space-between;
+  flex-direction: row-reverse;
   align-items: center;
   margin-bottom: 20px;
 }

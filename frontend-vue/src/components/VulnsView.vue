@@ -550,10 +550,6 @@ onMounted(() => {
   .filters {
     align-items: end;
 
-    .el-form-item {
-      margin-right: 12px;
-    }
-
     :deep(.el-input__wrapper) {
       width: 200px;
     }

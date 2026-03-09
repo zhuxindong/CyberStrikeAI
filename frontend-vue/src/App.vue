@@ -96,7 +96,6 @@ const route = useRoute();
   </div>
 </template>
 
-
 <style lang="scss" scoped>
 .app-layout {
   display: flex;
