@@ -32,8 +32,8 @@ public class BatchQueue {
     @Column(name = "current_index")
     private int currentIndex = 0;
 
-    @OneToMany(mappedBy = "queue", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
-    @OrderBy("id ASC") // Assuming ID order roughly equals insertion order, or add explicit index field
+    @OneToMany(mappedBy = "queue", fetch = FetchType.EAGER)
+    @OrderBy("createdAt ASC") // Assuming ID order roughly equals insertion order, or add explicit index field
     @JsonManagedReference
     private List<BatchTask> tasks = new ArrayList<>();
 

@@ -25,6 +25,9 @@ public class BatchTask {
     @Column(nullable = false)
     private String status; // pending, running, completed, pkg_failed, error
 
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt;
+
     @Column(name = "started_at")
     private LocalDateTime startedAt;
 
@@ -76,6 +79,13 @@ public class BatchTask {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
     }
 
     public LocalDateTime getStartedAt() {
