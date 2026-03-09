@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { Plus, ChatDotRound, Delete, Star, StarFilled, Search } from '@element-plus/icons-vue';
 import ConversationStore from "@/store/Conversation";
 import { storeToRefs } from 'pinia';
@@ -96,6 +96,10 @@ const filteredConversations = () => {
 
 onMounted(() => {
   fetchConversations();
+});
+
+onUnmounted(() => {
+  conversationId.value = '';
 });
 </script>
 

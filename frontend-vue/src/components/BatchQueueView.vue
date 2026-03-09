@@ -74,7 +74,7 @@ const timeRange = ref<string[]>();
 const keyword = ref('');
 
 const dialogVisible = ref(false);
-const roleOptions = ref<{ label: string; value: string }[]>([]);
+const roleOptions = ref<{ label: string; value: string; }[]>([]);
 const form = ref({
   title: '',
   role: '',
@@ -180,7 +180,6 @@ const fetchQueues = async (reset: boolean = false) => {
 
 const handleCreate = () => {
   formRef.value?.resetFields();
-  form.value = { title: '', role: '', tasksText: '' };
   dialogVisible.value = true;
 };
 
@@ -318,7 +317,7 @@ onMounted(() => {
           <el-input v-model.trim="form.title" placeholder="例如: 批量扫描主机..." />
         </el-form-item>
         <el-form-item label="指定角色" prop="role">
-          <el-select v-model="form.role" placeholder="可选">
+          <el-select v-model="form.role" placeholder="选择角色" clearable>
             <el-option v-for="role in roleOptions" :key="role.value" :label="role.label" :value="role.value" />
           </el-select>
         </el-form-item>
