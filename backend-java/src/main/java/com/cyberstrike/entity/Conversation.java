@@ -7,7 +7,6 @@ import jakarta.persistence.Table;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.time.LocalDateTime;
-import java.util.Objects;
 
 @Entity
 @Table(name = "conversations")
@@ -35,8 +34,8 @@ public class Conversation {
     @Column(nullable = false)
     private Boolean pinned = false;
 
-    public Conversation() {
-    }
+    @Column(nullable = false)
+    private String status = "pending"; // pending, running, completed, pkg_failed, error
 
     @jakarta.persistence.PrePersist
     public void prePersist() {
@@ -107,5 +106,13 @@ public class Conversation {
 
     public void setPinned(Boolean pinned) {
         this.pinned = pinned;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 }

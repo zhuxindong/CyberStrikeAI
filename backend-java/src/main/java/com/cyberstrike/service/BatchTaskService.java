@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class BatchTaskService {
@@ -35,12 +36,6 @@ public class BatchTaskService {
     private final BatchTaskRepository taskRepository;
     private final AgentService agentService;
     private final ConversationRepository conversationRepository;
-
-    @Autowired
-    private EntityManager entityManager; // 注入 EntityManager
-
-    @Autowired
-    private TransactionTemplate transactionTemplate; // 注入它
 
     public BatchTaskService(BatchQueueRepository queueRepository,
             BatchTaskRepository taskRepository,
@@ -186,7 +181,7 @@ public class BatchTaskService {
                 fullMessage = "Rule/Role: " + task.getQueue().getRole() + "\nTask: " + fullMessage;
             }
 
-            String result = agentService.executeTaskSync(conv.getId(), fullMessage);
+            String result = agentService.executeTaskSync(conv.getId(), fullMessage,task.getId());
             task.setResult(result);
             task.setStatus("completed");
         } catch (Exception e) {
@@ -248,5 +243,16 @@ public class BatchTaskService {
         batchTask.setCreatedAt(LocalDateTime.now());
         batchTask.setStatus("pending");
         return ResponseEntity.ok().body(taskRepository.save(batchTask));
+    }
+
+    public ResponseEntity<Map<String, Integer>> status() {
+        List<BatchQueue> batchQueueList = queueRepository.findAll();
+        Map<String, Integer> statusCounts = batchQueueList.stream()
+                .collect(Collectors.groupingBy(
+                        BatchQueue::getStatus,
+                        Collectors.collectingAndThen(Collectors.counting(), Long::intValue)
+                ));
+        statusCounts.put("total", batchQueueList.size());
+        return ResponseEntity.ok(statusCounts);
     }
 }

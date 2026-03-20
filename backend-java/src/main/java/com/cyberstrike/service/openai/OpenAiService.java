@@ -21,11 +21,20 @@ public class OpenAiService {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(OpenAiService.class);
 
     // --- 1. 核心修改：将 RestClient 定义为成员变量 (单例模式) ---
-    private final RestClient restClient;
+    private volatile  RestClient restClient;
 
+    private final ConfigRepository configRepository;
+
+    private final RestClient.Builder restClientBuilder;
     // --- 2. 注入 Builder ---
     @Autowired
     public OpenAiService(ConfigRepository configRepository, RestClient.Builder restClientBuilder) {
+        this.configRepository = configRepository;
+        this.restClientBuilder = restClientBuilder;
+        this.restClient = buildRestClient(); // 首次启动时构建
+    }
+
+    private RestClient buildRestClient() {
 
         // --- A. 初始化配置 (只在启动时读取一次，提升性能) ---
         Config config = configRepository.findById(1L).orElse(null);
@@ -68,7 +77,7 @@ public class OpenAiService {
         };
 
         // --- E. 构建 RestClient (只构建一次) ---
-        this.restClient = restClientBuilder
+        return restClientBuilder
                 .requestFactory(requestFactory) // 注入工厂
                 .baseUrl(baseUrl)
                 .defaultHeader("Authorization", "Bearer " + apiKey)
@@ -84,7 +93,7 @@ public class OpenAiService {
     // --- 3. 业务方法：直接使用单例的 restClient ---
     public OpenAIModels.ChatCompletionResponse chatCompletion(OpenAIModels.ChatCompletionRequest request) {
         return restClient.post()
-                .uri("/v1/chat/completions")
+                .uri("/chat/completions")
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                 .body(request)
                 .retrieve()
@@ -93,10 +102,18 @@ public class OpenAiService {
 
     public OpenAIModels.EmbeddingResponse createEmbeddings(OpenAIModels.EmbeddingRequest request) {
         return restClient.post()
-                .uri("/v1/embeddings")
+                .uri("/embeddings")
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                 .body(request)
                 .retrieve()
                 .body(OpenAIModels.EmbeddingResponse.class);
+    }
+
+    /**
+     * 动态刷新配置
+     */
+    public void refreshConfig() {
+        // 重新构建 restClient
+        this.restClient = buildRestClient();
     }
 }

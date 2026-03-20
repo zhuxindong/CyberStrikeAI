@@ -35,6 +35,7 @@ public class ConversationController {
         conversation.setCreatedAt(LocalDateTime.now());
         conversation.setUpdatedAt(LocalDateTime.now());
         conversation.setPinned(false);
+        conversation.setStatus("pending");
         conversationRepository.save(conversation);
         return ResponseEntity.ok(conversation);
     }
@@ -57,6 +58,11 @@ public class ConversationController {
             return ResponseEntity.ok(List.of());
         }
         return ResponseEntity.ok(conversations.subList(offset, end));
+    }
+
+    @GetMapping("/tasks")
+    public ResponseEntity<List<Conversation>> tasks() {
+        return ResponseEntity.ok(conversationRepository.findByStatus("running"));
     }
 
     // 获取对话详情 (包含消息)

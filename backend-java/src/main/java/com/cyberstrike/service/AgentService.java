@@ -165,6 +165,9 @@ public class AgentService {
         TaskInfo task = new TaskInfo();
         task.id = taskId;
         task.conversationId = conversationId;
+        Conversation conversation = conversationRepository.findById(conversationId).get();
+        conversation.setStatus("running");
+        conversationRepository.save(conversation);
         task.status = "running";
         task.message = request.getMessage().length() > 50
                 ? request.getMessage().substring(0, 50) + "..."
@@ -278,6 +281,8 @@ public class AgentService {
                         moveToCompleted(taskId, task);
                         emitter.complete();
                         chatCompletionMessageRepository.saveAll(messageDOList);
+                        conversation.setStatus("cancelled");
+                        conversationRepository.save(conversation);
                         return;
                     }
                     mId = saveMessage(conversationId, "assistant", "", "开始分析请求并制定测试策略", "","success","iteration",id,String.valueOf(i),null, null, null,LocalDateTime.now());
@@ -360,6 +365,8 @@ public class AgentService {
                                 moveToCompleted(taskId, task);
                                 emitter.complete();
                                 chatCompletionMessageRepository.saveAll(messageDOList);
+                                conversation.setStatus("cancelled");
+                                conversationRepository.save(conversation);
                                 return;
                             }
                             mId=saveMessage(conversationId, "assistant", "", "检测到 1 个工具调用", "","success","tool_calls_detected",id,String.valueOf(i),null,null,null,LocalDateTime.now());
@@ -504,6 +511,8 @@ public class AgentService {
                 task.completedAt = LocalDateTime.now();
                 moveToCompleted(taskId, task);
 
+                conversation.setStatus("completed");
+                conversationRepository.save(conversation);
                 emitter.complete();
             } catch (Exception e) {
                 log.error("Error in agent loop stream", e);
@@ -511,7 +520,7 @@ public class AgentService {
                 task.completedAt = LocalDateTime.now();
                 moveToCompleted(taskId, task);
                 try {
-                    String mId=saveMessage(
+                    saveMessage(
                             conversationId,
                             "assistant",
                             "",
@@ -519,8 +528,17 @@ public class AgentService {
                             "",
                             "success",
                             "error","","","",null,null,LocalDateTime.now());
-                    sendSseEvent(emitter, "error", mId,"执行出错: " + e.getMessage(), null);
-
+                    String mId=saveMessage(
+                            conversationId,
+                            "assistant",
+                            "",
+                            "执行出错: ",
+                            "",
+                            "success",
+                            "result","","","",null,null,LocalDateTime.now());
+                    conversation.setStatus("error");
+                    conversationRepository.save(conversation);
+                    sendSseEvent(emitter, "error", mId,"执行出错: ", null);
                     messageRepository.deleteById(resultId.get());
                     emitter.completeWithError(e);
                 } catch (Exception ex) {
@@ -619,8 +637,7 @@ public class AgentService {
     }
 
 //     同步执行任务（用于内部调用，如 BatchTask）
-    public String executeTaskSync(String conversationId, String messageText) {
-        String taskId = UUID.randomUUID().toString();
+    public String executeTaskSync(String conversationId, String messageText,String taskId) {
         TaskInfo task = new TaskInfo();
         task.id = taskId;
         task.conversationId = conversationId;

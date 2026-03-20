@@ -22,4 +22,6 @@ public interface ConversationRepository extends JpaRepository<Conversation, Stri
     List<Conversation> findByTitleContainingOrderByUpdatedAtDesc(String title);
 
     List<Conversation> findAllByOrderByUpdatedAtDesc();
+
+    List<Conversation> findByStatus(String status);
 }

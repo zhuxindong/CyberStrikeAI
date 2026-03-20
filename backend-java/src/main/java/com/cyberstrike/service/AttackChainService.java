@@ -2,11 +2,9 @@ package com.cyberstrike.service;
 
 import com.cyberstrike.entity.AttackChainEdge;
 import com.cyberstrike.entity.AttackChainNode;
+import com.cyberstrike.entity.Config;
 import com.cyberstrike.entity.Message;
-import com.cyberstrike.repository.AttackChainEdgeRepository;
-import com.cyberstrike.repository.AttackChainNodeRepository;
-import com.cyberstrike.repository.ConversationRepository;
-import com.cyberstrike.repository.MessageRepository;
+import com.cyberstrike.repository.*;
 import com.cyberstrike.service.openai.OpenAiService;
 import com.cyberstrike.service.openai.model.OpenAIModels;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -34,6 +32,7 @@ public class AttackChainService {
     private final ConversationRepository conversationRepository;
     private final OpenAiService openAiService;
     private final ObjectMapper objectMapper;
+    private final ConfigRepository configRepository;
 
     // 用于防止同一对话的并发生成
     private final ConcurrentHashMap<String, Boolean> generatingLocks = new ConcurrentHashMap<>();
@@ -43,12 +42,13 @@ public class AttackChainService {
             AttackChainEdgeRepository edgeRepository,
             MessageRepository messageRepository,
             ConversationRepository conversationRepository,
-            OpenAiService openAiService) {
+            OpenAiService openAiService, ConfigRepository configRepository) {
         this.nodeRepository = nodeRepository;
         this.edgeRepository = edgeRepository;
         this.messageRepository = messageRepository;
         this.conversationRepository = conversationRepository;
         this.openAiService = openAiService;
+        this.configRepository = configRepository;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -185,6 +185,7 @@ public class AttackChainService {
 
         OpenAIModels.ChatCompletionRequest request = new OpenAIModels.ChatCompletionRequest();
         request.setMessages(messages);
+        request.setModel(getCurrentModel());
         request.setTemperature(0.3);
         request.setMaxTokens(8000);
 
@@ -202,6 +203,23 @@ public class AttackChainService {
         content = content.replaceFirst("\\s*```$", "");
 
         return content.trim();
+    }
+
+    /**
+     * 获取当前配置的模型名称
+     * 每次调用都会查询数据库，确保获取的是最新值
+     */
+    private String getCurrentModel() {
+        try {
+            Long configId = 1L;
+            return configRepository.findById(configId)
+                    .map(Config::getModel)
+                    .filter(model -> !model.trim().isEmpty())
+                    .orElse("gpt-3.5-turbo");
+        } catch (Exception e) {
+            log.warn("获取模型配置时发生异常，使用默认模型 gpt-3.5-turbo", e);
+            return "gpt-3.5-turbo";
+        }
     }
 
     /**

@@ -53,7 +53,7 @@ class AgentServiceTest {
         when(yamlToolLoader.getAllTools()).thenReturn(Collections.emptyList());
         when(yamlToolLoader.getEnabledTools()).thenReturn(Collections.emptyList());
 
-        toolRegistry = new ToolRegistry(yamlToolLoader, knowledgeService, pythonVenvService);
+        //toolRegistry = new ToolRegistry(yamlToolLoader, knowledgeService, pythonVenvService);
 
         // Correct order: OpenAiService, ConversationRepository, MessageRepository,
         // ToolRegistry, String modelName
