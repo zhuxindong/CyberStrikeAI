@@ -8,8 +8,7 @@ import {
   Warning,
   Collection,
   Connection,
-  Platform,
-  House
+  Stopwatch
 } from '@element-plus/icons-vue';
 import Sidebar from './components/Sidebar.vue';
 import { useRoute } from 'vue-router';
@@ -27,6 +26,10 @@ const route = useRoute();
       </div>
       
       <el-menu mode="vertical" router :default-active="route.path">
+        <el-menu-item index="/dashboard">
+          <el-icon><Stopwatch /></el-icon>
+          <span class="nav-label">仪表盘</span>
+        </el-menu-item>
         <el-menu-item index="/chat">
           <el-icon><ChatDotRound /></el-icon>
           <span class="nav-label">对话</span>
@@ -35,10 +38,20 @@ const route = useRoute();
           <el-icon><VideoPlay /></el-icon>
           <span class="nav-label">任务</span>
         </el-menu-item>
-        <el-menu-item index="/knowledge">
-          <el-icon><Collection /></el-icon>
-          <span class="nav-label">知识</span>
-        </el-menu-item>
+        <el-sub-menu index="knowledge">
+          <template #title>
+            <el-icon><Collection /></el-icon>
+            <span class="nav-label">知识</span>
+          </template>
+          <el-menu-item-group>
+            <el-menu-item index="/knowledge-retrieval-logs">
+              <span class="nav-label">检索历史</span>
+            </el-menu-item>
+            <el-menu-item index="/knowledge-management">
+              <span class="nav-label">知识管理</span>
+            </el-menu-item>
+          </el-menu-item-group>
+        </el-sub-menu>
         <el-menu-item index="/role">
           <el-icon><User /></el-icon>
           <span class="nav-label">角色</span>
@@ -54,11 +67,9 @@ const route = useRoute();
           </template>
           <el-menu-item-group>
             <el-menu-item index="/mcp-monitor">
-              <el-icon><Platform /></el-icon>
               <span class="nav-label">MCP监控</span>
             </el-menu-item>
             <el-menu-item index="/mcp-manage">
-              <el-icon><House /></el-icon>
               <span class="nav-label">MCP管理</span>
             </el-menu-item>
           </el-menu-item-group>
@@ -116,6 +127,7 @@ const route = useRoute();
   padding: 16px 0;
   z-index: 100;
   flex-shrink: 0;
+  overflow-y: auto;
 
   .el-menu {
     width: 150px;

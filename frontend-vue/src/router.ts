@@ -4,7 +4,12 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/chat'
+      redirect: '/dashboard'
+    },
+    {
+      name: '仪表盘',
+      path: '/dashboard',
+      component: () => import('./components/Dashboard.vue')
     },
     {
       name: 'CyberStrikeAI',
@@ -18,7 +23,7 @@ const router = createRouter({
     },
     {
       name: '知识库管理',
-      path: '/knowledge',
+      path: '/knowledge-management',
       component: () => import('./components/KnowledgeView.vue')
     },
     {

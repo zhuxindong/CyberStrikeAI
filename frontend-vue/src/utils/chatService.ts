@@ -1,6 +1,6 @@
 export interface StreamCallbacks {
     onMessage: (id: string, content: string, type: string, extraData?: any) => void;
-    onCancell: () => void;
+    onCancel: () => void;
     onError: () => void;
     onDone: () => void;
 }
@@ -56,7 +56,7 @@ export async function streamChat(
                         if (event.type === "done") {
                             callbacks.onDone();
                         } else if (event.type === 'cancelled') {
-                            callbacks.onCancell();
+                            callbacks.onCancel();
                         } else if (event.type === 'error') {
                             callbacks.onError();
                         }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, onMounted, reactive } from 'vue';
+import { ref, nextTick, watch, onMounted, reactive, useTemplateRef } from 'vue';
 import { streamChat } from '../utils/chatService';
 import { escapeHtml } from '../utils/escape';
 import MarkdownIt from 'markdown-it';
@@ -11,6 +11,7 @@ import McpCallDialog from "./McpCallDialog.vue";
 
 import { storeToRefs } from 'pinia';
 import ConversationStore from "@/store/Conversation";
+import ChatStore from "@/store/Chat";
 import { useRoute } from 'vue-router';
 
 const md = new MarkdownIt();
@@ -29,13 +30,6 @@ interface TimelineItem {
   resultStatus?: string;
 }
 
-interface Task {
-  id: string;
-  message: string;
-  status: string;
-  time: string;
-}
-
 interface Message {
   id?: string;
   role: 'user' | 'assistant' | 'system';
@@ -50,19 +44,34 @@ interface Message {
   mcpCalls?: any[];
 }
 
+interface ActiveTaskMessage {
+  id: string;
+  taskId: string;
+  status: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  lastReactInput: string;
+  lastReactOutput: string;
+  pinned: boolean;
+}
+
 const input = ref('');
 const messages = reactive<Message[]>([]);
-const activeTasks = ref<Task[]>([]);
+const activeTasks = ref<ActiveTaskMessage[]>([]);
 const loading = ref(false);
 const currentTaskId = ref<string | undefined>(undefined);
 const progressTitle = ref<string>('');
-const messagesContainer = ref<HTMLElement | null>(null);
+const messagesContainer = useTemplateRef<HTMLElement>('messagesContainer');
+const progressTimeline = useTemplateRef<HTMLElement[]>('progressTimeline');
+
 const showAttackChain = ref(false);
 const mcpCallDialogVisible = ref<boolean>(false);
 const mcpCallDetail = ref<unknown>({});
 
-const store = ConversationStore();
-const { conversationId: currentConversationId } = storeToRefs(store);
+const conversionStore = ConversationStore();
+const chatStore = ChatStore();
+const { conversationId: currentConversationId } = storeToRefs(conversionStore);
 
 // Role Management
 const roleIcons: Record<string, any> = {
@@ -170,8 +179,39 @@ const loadConversationHistory = async (conversationId: string) => {
   }
 };
 
+let activeTaskInterval: NodeJS.Timeout | undefined;
+// 加载活跃任务
+const loadActiveTasks = async () => {
+  const res = await fetch('/api/conversations/tasks');
+  if (res.ok) {
+    const queueStatusMap: Record<string, Record<'label' | 'elType', string>> = chatStore.queueStatusMap;
+    const data = await res.json();
+    activeTasks.value = data.map((item: ActiveTaskMessage) => {
+      item.createdAt = dayjs(item.createdAt).format('YYYY-MM-DD HH:mm:ss');
+      item.updatedAt = dayjs(item.updatedAt).format('YYYY-MM-DD HH:mm:ss');
+      item.status = queueStatusMap[item.status].label;
+      return item;
+    });
+    if (data.length === 0) {
+      stopLoadActiveTasks();
+    } else if (!activeTaskInterval) {
+      activeTaskInterval = setInterval(() => {
+        loadActiveTasks();
+      }, 3000);
+    }
+  }
+};
+
+// 停止加载活跃任务
+const stopLoadActiveTasks = () => {
+  activeTasks.value = [];
+  clearInterval(activeTaskInterval);
+  activeTaskInterval = undefined;
+};
+
 // 监听 conversationId 变化，加载历史消息
 watch(() => currentConversationId.value, async (newId) => {
+  messages.splice(0);
   if(newId) {
     await loadConversationHistory(newId);
   }
@@ -195,9 +235,13 @@ const scrollToBottom = async () => {
   if (messagesContainer.value) {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
   }
+  if (progressTimeline.value?.length) {
+    const lastItem = progressTimeline.value[progressTimeline.value.length - 1];
+    lastItem.scrollTop = lastItem.scrollHeight;
+  }
 };
 
-// 生成调用序列
+// 生成调用工具信息
 const generateMCPCalls = (message: Message) => {
   const timelineItems: TimelineItem[] = message.timelineItems || [];
   message.mcpCalls = timelineItems.filter(item => item.type === 'tool_call').map(item => ({
@@ -236,6 +280,7 @@ const sendMessage = async () => {
     onMessage: (id, content, type, data) => {
       // 流式输出的对话Id和当前对话Id不一致时，不会输出对话
       if (currentConversationId.value !== streamingConversatinoId) {
+        loadActiveTasks();
         return;
       }
       // 最近的一条消息
@@ -250,6 +295,7 @@ const sendMessage = async () => {
           currentTaskId.value = data.taskId;
           streamingConversatinoId = data.conversationId;
           progressTitle.value = '🔍 渗透测试进行中...';
+          loadActiveTasks();
         }
       } else if (['iteration', 'thinking', 'tool_calls_detected'].includes(type)) {
         lastMessage.timelineItems.push({
@@ -301,7 +347,8 @@ const sendMessage = async () => {
       }
       scrollToBottom();
     },
-    onCancell() {
+    onCancel: () => {
+      stopLoadActiveTasks();
       if (currentConversationId.value !== streamingConversatinoId) {
         return;
       }
@@ -317,6 +364,7 @@ const sendMessage = async () => {
       scrollToBottom();
     },
     onError: () => {
+      stopLoadActiveTasks();
       if (currentConversationId.value !== streamingConversatinoId) {
         return;
       }
@@ -328,6 +376,7 @@ const sendMessage = async () => {
       scrollToBottom();
     },
     onDone: () => {
+      stopLoadActiveTasks();
       if (currentConversationId.value !== streamingConversatinoId) {
         return;
       }
@@ -356,10 +405,9 @@ const stopTask = async (taskId?: string) => {
       body: JSON.stringify({ task_id: taskId })
     });
     if (res.ok) {
-      const i = activeTasks.value.findIndex(t => t.id === taskId);
-      if (i !== -1) {
-        activeTasks.value.splice(i, 1);
-      }
+      loadActiveTasks();
+    } else {
+      ElMessage.error('停止任务失败');
     }
   } catch (error) {
     console.error('Failed to cancel task:', error);
@@ -414,11 +462,11 @@ const renderMarkdown = (text: string | undefined) => {
           <div v-for="task in activeTasks" :key="task.id" class="active-task-item">
             <div class="active-task-info">
               <span class="active-task-status">{{ task.status }}</span>
-              <span class="active-task-message">{{ task.message }}</span>
+              <span class="active-task-message">{{ task.title }}</span>
             </div>
             <div class="active-task-actions">
-              <span class="active-task-time">{{ task.time }}</span>
-              <el-button type="danger" @click="stopTask(task.id)">停止任务</el-button>
+              <span class="active-task-time">{{ task.createdAt }}</span>
+              <el-button type="danger" @click="stopTask(task.taskId)">停止任务</el-button>
             </div>
           </div>
         </div>
@@ -460,7 +508,7 @@ const renderMarkdown = (text: string | undefined) => {
               </div>
             </div>
             <!-- 调用序列 -->
-            <div v-show="msg.timelineItems?.length" :class="['progress-timeline', { 'expanded': msg.expanded }]">
+            <div ref="progressTimeline" v-show="msg.timelineItems?.length" :class="['progress-timeline', { 'expanded': msg.expanded }]">
               <div v-for="({ id, createdAt, title, type, content, args }) in msg.timelineItems"
                 :key="id"
                 :class="['timeline-item', `timeline-item-${type}`]">
@@ -601,6 +649,7 @@ const renderMarkdown = (text: string | undefined) => {
   position: absolute;
   width: 100%;
   padding: 8px;
+  z-index: 100;
 
   .task-container {
     display: flex;
@@ -620,6 +669,12 @@ const renderMarkdown = (text: string | undefined) => {
     box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.03);
     margin-right: 12px;
     margin-bottom: 12px;
+  }
+
+  .active-task-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   .active-task-status {
