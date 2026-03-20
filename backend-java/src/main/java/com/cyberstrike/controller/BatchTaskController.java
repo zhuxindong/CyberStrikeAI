@@ -99,4 +99,9 @@ public class BatchTaskController {
     public ResponseEntity<?> createTask(@RequestBody BatchTask batchTask) {
         return batchTaskService.createTask(batchTask);
     }
+
+    @GetMapping ("/staus")
+    public ResponseEntity<Map<String,Integer>> status() {
+        return batchTaskService.status();
+    }
 }

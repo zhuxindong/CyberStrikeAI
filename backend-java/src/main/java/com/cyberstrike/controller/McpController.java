@@ -7,9 +7,11 @@ import com.cyberstrike.mcp.McpManager;
 import com.cyberstrike.mcp.McpTypes;
 import com.cyberstrike.repository.McpServerRepository;
 import com.cyberstrike.repository.MessageRepository;
+import com.cyberstrike.service.McpService;
 import com.cyberstrike.tool.ToolRegistry;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -501,21 +503,6 @@ public class McpController {
         return ResponseEntity.ok(response);
     }
 
-    // 辅助方法：解析 JSON 字段
-//    private Map<String, Object> parseJsonField(String json) {
-//        if (json == null || json.trim().isEmpty()) {
-//            return new HashMap<>();
-//        }
-//        try {
-//            // 这里需要注入 ObjectMapper 或使用静态实例
-//            // return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
-//            return new HashMap<>();
-//        } catch (Exception e) {
-//            Map<String, Object> errorMap = new HashMap<>();
-//            errorMap.put("parse_error", e.getMessage());
-//            return errorMap;
-//        }
-//    }
 
     // 辅助方法：构建结果内容
     private Map<String, Object> buildResultContent(Message resultMsg) {
@@ -531,6 +518,14 @@ public class McpController {
         resultObj.put("isError", resultMsg == null || !"success".equals(resultMsg.getResultStatus()));
 
         return resultObj;
+    }
+
+    @Autowired
+    private McpService mcpService;
+
+    @GetMapping ("/staus")
+    public ResponseEntity<Map<String,Object>> status() {
+        return mcpService.status();
     }
 }
 

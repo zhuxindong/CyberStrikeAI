@@ -2,6 +2,7 @@ package com.cyberstrike.controller;
 
 import com.cyberstrike.entity.Config;
 import com.cyberstrike.repository.ConfigRepository;
+import com.cyberstrike.service.openai.OpenAiService;
 import com.cyberstrike.tool.ToolRegistry;
 import com.cyberstrike.tool.YamlToolLoader;
 import com.cyberstrike.tool.YamlToolDefinition;
@@ -22,6 +23,9 @@ public class ConfigController {
 
     @Autowired
     private ConfigRepository configRepository;
+
+    @Autowired
+    private OpenAiService openAiService;
 
     // 内存配置存储 (实际应使用数据库)
 //    private Map<String, Object> config = new HashMap<>();
@@ -58,6 +62,8 @@ public class ConfigController {
         //config.putAll(body);
         config.setId(1l);
         configRepository.save(config);
+        // --- 关键：配置保存后，通知 OpenAiService 刷新客户端 ---
+        openAiService.refreshConfig();
         return ResponseEntity.ok(config);
     }
 
