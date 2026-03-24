@@ -24,4 +24,18 @@ public interface ConversationRepository extends JpaRepository<Conversation, Stri
     List<Conversation> findAllByOrderByUpdatedAtDesc();
 
     List<Conversation> findByStatus(String status);
+
+    // ==================== WebShell AI History 相关 ====================
+
+    /**
+     * 【Go -> Java 迁移新增】根据 WebShell 连接 ID 查询最近一条对话
+     * 对齐 Go：GetConversationByWebshellConnectionID
+     */
+    java.util.Optional<Conversation> findTopByWebshellConnectionIdOrderByUpdatedAtDesc(String webshellConnectionId);
+
+    /**
+     * 【Go -> Java 迁移新增】列出该 WebShell 连接下的所有对话（按更新时间倒序）
+     * 对齐 Go：ListConversationsByWebshellConnectionID
+     */
+    List<Conversation> findByWebshellConnectionIdOrderByUpdatedAtDesc(String webshellConnectionId);
 }

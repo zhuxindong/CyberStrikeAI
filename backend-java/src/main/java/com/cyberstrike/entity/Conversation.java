@@ -37,6 +37,24 @@ public class Conversation {
     @Column(nullable = false)
     private String status = "pending"; // pending, running, completed, pkg_failed, error
 
+    @Column(name = "task_id")
+    private String taskId;
+
+    public String getTaskId() {
+        return taskId;
+    }
+
+    public void setTaskId(String taskId) {
+        this.taskId = taskId;
+    }
+
+    /**
+     * 【Go -> Java 迁移新增】关联的 WebShell 连接 ID
+     * 用于 WebShell AI 助手持久化对话
+     */
+    @Column(name = "webshell_connection_id")
+    private String webshellConnectionId;
+
     @jakarta.persistence.PrePersist
     public void prePersist() {
         if (this.createdAt == null)
@@ -114,5 +132,13 @@ public class Conversation {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getWebshellConnectionId() {
+        return webshellConnectionId;
+    }
+
+    public void setWebshellConnectionId(String webshellConnectionId) {
+        this.webshellConnectionId = webshellConnectionId;
     }
 }

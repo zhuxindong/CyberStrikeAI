@@ -22,8 +22,14 @@ public interface MessageRepository extends JpaRepository<Message, String> {
     @Transactional
     void deleteByConversationId(String conversationId);
 
-    Page<Message> findByTypeAndDelFlagNotAndMcpExecutionIdsContainingIgnoreCaseAndResultStatusContainingIgnoreCase(String tool_call, int i, String searchToolName, String searchStatus, Pageable pageable);
-
+    Page<Message> findByTypeAndDelFlagNotAndToolTypeAndMcpExecutionIdsContainingIgnoreCaseAndResultStatusContainingIgnoreCase(
+            String type,
+            int delFlag,
+            String toolType,
+            String mcpExecutionIds,
+            String resultStatus,
+            Pageable pageable
+    );
     List<Message> findByToolIdInAndType(List<String> callIds, String tool_result);
 
     @Modifying

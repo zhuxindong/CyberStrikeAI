@@ -167,6 +167,7 @@ public class AgentService {
         task.conversationId = conversationId;
         Conversation conversation = conversationRepository.findById(conversationId).get();
         conversation.setStatus("running");
+        conversation.setTaskId(taskId);
         conversationRepository.save(conversation);
         task.status = "running";
         task.message = request.getMessage().length() > 50
@@ -386,6 +387,7 @@ public class AgentService {
                             // --- 执行工具并捕获结果 ---
                             String result;
                             String resultStatus;
+                            String toolType = "MCP";
                             try {
                                 // --- 1. 从 Registry 中查找工具定义 ---外部mcp
                                 ToolRegistry.ToolDefinition toolDefinition = toolRegistry.getToolsAll().stream()
@@ -394,6 +396,9 @@ public class AgentService {
                                         .orElse(null);
 
                                 // --- 2. 根据定义执行逻辑 ---
+                                // 获取工具类型 (mcp/yaml/skills)
+                                toolType = toolDefinition != null ? toolDefinition.toolType() : "yaml";
+                                
                                 if (toolDefinition == null) {
                                     result = "执行失败：工具未注册或已禁用: " + rawFunctionName;
                                     resultStatus = "failed";
@@ -448,7 +453,7 @@ public class AgentService {
                                     functionNameWithIndex,
                                     resultStatus,
                                     "tool_call",id,String.valueOf(i),String.format("{\"toolName\": \"%s\", \"arguments\": %s}", rawFunctionName, arguments), null, null
-                                    ,createdAt);
+                                    ,createdAt,toolType);
 
                             sendSseEvent(emitter, "tool_call", toolResultId,"正在调用工具: " + rawFunctionName,
                                     String.format("{\"toolName\": \"%s\", \"arguments\": %s}", rawFunctionName, arguments));
@@ -464,7 +469,7 @@ public class AgentService {
                                     functionNameWithIndex,
                                     resultStatus,
                                     "tool_result", id,String.valueOf(i),String.format("{\"toolName\": \"%s\"}", rawFunctionName),toolResultId,secondsSinceCreation
-                                    ,LocalDateTime.now());
+                                    ,LocalDateTime.now(),toolType);
 
                             sendSseEvent(emitter, "tool_result",mId, result,
                                     String.format("{\"toolName\": \"%s\",\"resultStatus\": \"%s\"}", rawFunctionName,resultStatus));
@@ -617,7 +622,7 @@ public class AgentService {
     private String saveMessage(String conversationId, String role,String mcp,
                                String content, String functionName, String resultStatus,
                                String type,String requestId,String iteration,String dataJson,String toolId,
-                               Integer time,LocalDateTime createdAt) {
+                               Integer time,LocalDateTime createdAt, String toolType) {
         Message msg = new Message();
         msg.setConversationId(conversationId);
         msg.setRole(role);
@@ -632,8 +637,18 @@ public class AgentService {
         msg.setToolId(toolId);
         msg.setTime(time);
         msg.setCreatedAt(createdAt);
+        msg.setToolType(toolType != null ? toolType : "yaml");
         messageRepository.save(msg);
         return msg.getId();
+    }
+    
+    // 重载方法：不带toolType参数
+    private String saveMessage(String conversationId, String role,String mcp,
+                               String content, String functionName, String resultStatus,
+                               String type,String requestId,String iteration,String dataJson,String toolId,
+                               Integer time,LocalDateTime createdAt) {
+        return saveMessage(conversationId, role, mcp, content, functionName, resultStatus,
+                          type, requestId, iteration, dataJson, toolId, time, createdAt, "MCP");
     }
 
 //     同步执行任务（用于内部调用，如 BatchTask）

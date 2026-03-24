@@ -3,6 +3,7 @@ package com.cyberstrike.tool;
 import com.cyberstrike.entity.McpServer;
 import com.cyberstrike.mcp.McpExecutor;
 import com.cyberstrike.repository.McpServerRepository;
+import com.cyberstrike.service.SkillsStatsService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,18 +37,96 @@ public class ToolRegistry {
     private final com.cyberstrike.service.KnowledgeService knowledgeService;
     private final com.cyberstrike.service.PythonVenvService pythonVenvService;
     private final McpServerRepository mcpServerRepository;
+    private final com.cyberstrike.skills.SkillsManager skillsManager;
+    private final SkillsStatsService skillsStatsService;
 
     public ToolRegistry(YamlToolLoader yamlToolLoader,
             com.cyberstrike.service.KnowledgeService knowledgeService,
             com.cyberstrike.service.PythonVenvService pythonVenvService,
-                        McpServerRepository mcpServerRepository) {
+                        McpServerRepository mcpServerRepository,
+            com.cyberstrike.skills.SkillsManager skillsManager,
+            SkillsStatsService skillsStatsService) {
         this.yamlToolLoader = yamlToolLoader;
         this.knowledgeService = knowledgeService;
         this.pythonVenvService = pythonVenvService;
         this.mcpServerRepository = mcpServerRepository;
+        this.skillsManager = skillsManager;
+        this.skillsStatsService = skillsStatsService;
         registerBuiltinTools();
+        // 注册Skills工具
+        registerSkillsTools();
         log.info("工具注册完成: {} 个内置工具, {} 个 YAML 工具",
                 builtinTools.size(), yamlToolLoader.getAllTools().size());
+    }
+    
+    /**
+     * 注册Skills工具 - 每个skill注册为独立工具
+     */
+    private void registerSkillsTools() {
+        if (skillsManager == null) {
+            log.warn("SkillsManager 未注入，跳过注册 Skills 工具");
+            return;
+        }
+        try {
+            // list_skills 工具
+            String listSkillsParams = "{}";
+
+            // 为每个skill注册独立的工具
+            List<String> skillNames = skillsManager.listSkills();
+            for (String skillName : skillNames) {
+                String skillToolName = skillName;
+                // 获取skill的描述
+                com.cyberstrike.skills.Skill skill = skillsManager.loadSkill(skillName);
+                String description = skill != null && skill.getDescription() != null ? 
+                    skill.getDescription() : "读取 " + skillName + " skill的详细内容。";
+                
+                builtinTools.put(skillToolName, new ToolDefinition(
+                    skillToolName,
+                    description,
+                    objectMapper.readTree("{}"),
+                    args -> {
+                        try {
+                            com.cyberstrike.skills.Skill loadedSkill = skillsManager.loadSkill(skillName);
+                            if (loadedSkill == null) {
+                                // 记录失败
+                                if (skillsStatsService != null) {
+                                    skillsStatsService.recordSkillCall(skillName, false);
+                                }
+                                return "读取skill失败: " + skillName;
+                            }
+                            
+                            // 记录成功调用
+                            if (skillsStatsService != null) {
+                                skillsStatsService.recordSkillCall(skillName, true);
+                            }
+                            
+                            StringBuilder result = new StringBuilder();
+                            result.append("## Skill: ").append(loadedSkill.getName()).append("\n\n");
+                            if (loadedSkill.getDescription() != null) {
+                                result.append("**描述**: ").append(loadedSkill.getDescription()).append("\n\n");
+                            }
+                            result.append("---\n\n");
+                            result.append(loadedSkill.getContent());
+                            result.append("\n\n---\n\n");
+                            result.append("*Skill路径: ").append(loadedSkill.getPath()).append("*");
+                            return result.toString();
+                        } catch (Exception e) {
+                            log.error("读取skill失败: " + skillName, e);
+                            // 记录失败
+                            if (skillsStatsService != null) {
+                                skillsStatsService.recordSkillCall(skillName, false);
+                            }
+                            return "读取skill失败: " + skillName + " - " + e.getMessage();
+                        }
+                    },
+                    "Skills"
+                ));
+            }
+            
+            log.info("Skills 工具注册成功: {} 个", skillNames.size());
+        } catch (Exception e) {
+            log.error("注册 Skills 工具失败: ", e);
+        }
     }
 
     /**
@@ -293,7 +372,8 @@ public class ToolRegistry {
                         yamlTool.getShortDescription() != null ? yamlTool.getShortDescription()
                                 : yamlTool.getDescription(),
                         params,
-                        null // YAML 工具使用 YamlToolLoader 执行
+                        null,
+                        "MCP" // YAML 工具类型
                 ));
             } catch (Exception e) {
                 log.error("转换 YAML 工具失败: {}", yamlTool.getName(), e);
@@ -345,7 +425,8 @@ public class ToolRegistry {
                         server.getName(),
                         server.getDescription(),
                         paramsNode,
-                        new McpExecutor(server, objectMapper) // 传入 executor
+                        new McpExecutor(server, objectMapper),
+                        "MCP" // MCP 工具类型
                 );
                 allTools.add(mcpTool);
             }
@@ -367,7 +448,8 @@ public class ToolRegistry {
                         yamlTool.getShortDescription() != null ? yamlTool.getShortDescription()
                                 : yamlTool.getDescription(),
                         params,
-                        null // YAML 工具使用 YamlToolLoader 执行
+                        null,
+                        "MCP"
                 ));
             } catch (Exception e) {
                 log.error("转换 YAML 工具失败: {}", yamlTool.getName(), e);
@@ -480,6 +562,11 @@ public class ToolRegistry {
     }
 
     public record ToolDefinition(String name, String description, JsonNode parameters,
-            Function<JsonNode, String> executor) {
+            Function<JsonNode, String> executor, String toolType) {
+        
+        public ToolDefinition(String name, String description, JsonNode parameters,
+                Function<JsonNode, String> executor) {
+            this(name, description, parameters, executor, "MCP");
+        }
     }
 }

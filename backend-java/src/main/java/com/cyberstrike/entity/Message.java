@@ -55,6 +55,9 @@ public class Message {
     @Column(name = "del_flag", nullable = false)
     private Integer delFlag=0;
 
+    @Column(name = "tool_type", nullable = false)
+    private String toolType="yaml";
+
     public Message() {
     }
 
@@ -196,5 +199,13 @@ public class Message {
 
     public void setDelFlag(Integer delFlag) {
         this.delFlag = delFlag;
+    }
+
+    public String getToolType() {
+        return toolType;
+    }
+
+    public void setToolType(String toolType) {
+        this.toolType = toolType;
     }
 }
