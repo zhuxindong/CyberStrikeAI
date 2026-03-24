@@ -27,6 +27,16 @@ const router = createRouter({
       component: () => import('./components/KnowledgeView.vue')
     },
     {
+      name: 'Skills状态监控',
+      path: '/skill-monitor',
+      component: () => import('./components/SkillMonitor.vue')
+    },
+    {
+      name: 'Skills管理',
+      path: '/skill-manage',
+      component: () => import('./components/SkillManage.vue')
+    },
+    {
       name: '角色管理',
       path: '/role',
       component: () => import('./components/RolesView.vue')

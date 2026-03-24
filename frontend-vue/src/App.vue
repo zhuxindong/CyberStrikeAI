@@ -52,6 +52,20 @@ const route = useRoute();
             </el-menu-item>
           </el-menu-item-group>
         </el-sub-menu>
+        <el-sub-menu index="skills">
+          <template #title>
+            <el-icon><Collection /></el-icon>
+            <span class="nav-label">Skills</span>
+          </template>
+          <el-menu-item-group>
+            <el-menu-item index="/skill-monitor">
+              <span class="nav-label">Skills状态监控</span>
+            </el-menu-item>
+            <el-menu-item index="/skill-manage">
+              <span class="nav-label">Skills管理</span>
+            </el-menu-item>
+          </el-menu-item-group>
+        </el-sub-menu>
         <el-menu-item index="/role">
           <el-icon><User /></el-icon>
           <span class="nav-label">角色</span>
