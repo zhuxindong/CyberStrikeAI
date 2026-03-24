@@ -30,6 +30,7 @@ public class McpService {
         List<Message> messageList = messageRepository.findAll();
         // 过滤出 type 为 tool_result 的消息
         List<Message> toolResultList = messageList.stream()
+                .filter(msg -> "MCP".equals(msg.getToolType()))
                 .filter(msg -> "tool_result".equals(msg.getType()))
                 .collect(Collectors.toList());
         if (toolResultList == null || toolResultList.isEmpty()) {

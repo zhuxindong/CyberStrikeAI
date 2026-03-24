@@ -354,7 +354,7 @@ public class McpController {
         // --- 核心修改：过滤 delFlag = 1 的数据 ---
         List<Message> toolMessages = messageList.stream()
                 .filter(msg -> "tool_call".equals(msg.getType())
-                        && msg.getDelFlag() != 1) // 保留 delFlag 不等于 1 的记录
+                        && msg.getDelFlag() != 1&&  "MCP".equals(msg.getToolType())) // 保留 delFlag 不等于 1 的记录
                 .collect(Collectors.toList());
 
         Map<String, List<Message>> groupedByTool = toolMessages.stream()
@@ -430,8 +430,8 @@ public class McpController {
         String searchStatus = (status == null) ? "" : status;
 
         // 3. 执行数据库查询
-        Page<Message> callPage = messageRepository.findByTypeAndDelFlagNotAndMcpExecutionIdsContainingIgnoreCaseAndResultStatusContainingIgnoreCase(
-                "tool_call", 1, searchToolName, searchStatus, pageable);
+        Page<Message> callPage = messageRepository.findByTypeAndDelFlagNotAndToolTypeAndMcpExecutionIdsContainingIgnoreCaseAndResultStatusContainingIgnoreCase(
+                "tool_call", 1, "MCP", searchToolName, searchStatus, pageable);
 
         List<Message> toolCalls = callPage.getContent();
 
