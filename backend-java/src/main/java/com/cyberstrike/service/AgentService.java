@@ -454,6 +454,9 @@ public class AgentService {
                                     resultStatus,
                                     "tool_call",id,String.valueOf(i),String.format("{\"toolName\": \"%s\", \"arguments\": %s}", rawFunctionName, arguments), null, null
                                     ,createdAt,toolType);
+                            
+                            // 设置 messageId 到 ToolContext（用于知识检索等工具记录）
+                            ToolContext.setMessageId(toolResultId);
 
                             sendSseEvent(emitter, "tool_call", toolResultId,"正在调用工具: " + rawFunctionName,
                                     String.format("{\"toolName\": \"%s\", \"arguments\": %s}", rawFunctionName, arguments));

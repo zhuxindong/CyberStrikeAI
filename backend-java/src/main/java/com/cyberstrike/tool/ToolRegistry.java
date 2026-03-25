@@ -21,6 +21,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 统一工具注册中心
@@ -55,8 +56,12 @@ public class ToolRegistry {
         registerBuiltinTools();
         // 注册Skills工具
         registerSkillsTools();
-        log.info("工具注册完成: {} 个内置工具, {} 个 YAML 工具",
-                builtinTools.size(), yamlToolLoader.getAllTools().size());
+        // 统计知识库工具数量
+        long knowledgeToolsCount = builtinTools.values().stream()
+                .filter(t -> "Knowledge".equals(t.toolType()))
+                .count();
+        log.info("工具注册完成: {} 个内置工具(含 {} 个知识库工具), {} 个 YAML 工具",
+                builtinTools.size(), knowledgeToolsCount, yamlToolLoader.getAllTools().size());
     }
     
     /**
@@ -322,34 +327,153 @@ public class ToolRegistry {
         }
 
         // ==================================================================
-        // 知识库检索
+        // 知识库工具注册
         // ==================================================================
         if (knowledgeService != null) {
-            registerBuiltinTool("search_knowledge_base", "知识库向量检索，查询项目文档、经验库等",
-                    """
-                    {"type":"object", "properties":{
-                        "query":{"type":"string", "description":"搜索关键词或自然语言问题"}
-                    }, "required":["query"]}
-                    """,
-                    (args) -> {
-                        String query = args.get("query").asText();
-                        try {
-                            List<com.cyberstrike.entity.KnowledgeItem> results = knowledgeService.search(query, 3);
-                            if (results.isEmpty()) {
-                                return "Knowledge Base: No relevant information found.";
-                            }
-                            StringBuilder sb = new StringBuilder("Knowledge Base Search Results:\n\n");
-                            for (com.cyberstrike.entity.KnowledgeItem item : results) {
-                                sb.append("--- [").append(item.getTitle()).append("] ---\n");
-                                sb.append(item.getContent()).append("\n\n");
-                            }
-                            return sb.toString();
-                        } catch (Exception e) {
-                            return "Knowledge Base Error: " + e.getMessage();
-                        }
-                    });
+            // 注册知识库工具 - 类似 Skills 模块的注册方式
+            registerKnowledgeTools();
         }
 
+    }
+
+    /**
+     * 注册知识库工具 - 类似 Skills 模块的注册方式
+     */
+    private void registerKnowledgeTools() {
+        if (knowledgeService == null) {
+            log.warn("KnowledgeService 未注入，跳过注册知识库工具");
+            return;
+        }
+
+        // 工具1: 获取所有风险类型列表
+        registerBuiltinTool("list_knowledge_risk_types", "获取知识库中所有可用的风险类型（risk_type）列表。在搜索知识库之前，可以先调用此工具获取可用的风险类型，然后使用正确的风险类型进行精确搜索，这样可以大幅减少检索时间并提高检索准确性。",
+                """
+                {"type":"object", "properties":{}, "required":[]}
+                """,
+                (args) -> {
+                    try {
+                        List<String> categories = knowledgeService.getCategories();
+                        if (categories.isEmpty()) {
+                            return "知识库中暂无风险类型。";
+                        }
+                        StringBuilder sb = new StringBuilder();
+                        sb.append(String.format("知识库中共有 %d 个风险类型：\n\n", categories.size()));
+                        for (int i = 0; i < categories.size(); i++) {
+                            sb.append(String.format("%d. %s\n", i + 1, categories.get(i)));
+                        }
+                        sb.append("\n提示：在调用 search_knowledge_base 工具时，可以使用上述风险类型之一作为 risk_type 参数，以缩小搜索范围并提高检索效率。");
+                        return sb.toString();
+                    } catch (Exception e) {
+                        return "获取风险类型列表失败: " + e.getMessage();
+                    }
+                },
+                "Knowledge");  // 设置 toolType 为 Knowledge
+
+        // 工具2: 搜索知识库
+        registerBuiltinTool("search_knowledge_base", "在知识库中搜索相关的安全知识。当你需要了解特定漏洞类型、攻击技术、检测方法等安全知识时，可以使用此工具进行检索。工具使用向量检索和混合搜索技术，能够根据查询内容的语义相似度和关键词匹配，自动找到最相关的知识片段。建议：在搜索前可以先调用 list_knowledge_risk_types 工具获取可用的风险类型，然后使用正确的 risk_type 参数进行精确搜索，这样可以大幅减少检索时间。",
+                """
+                {"type":"object", "properties":{
+                    "query":{"type":"string", "description":"搜索查询内容，描述你想要了解的安全知识主题"},
+                    "risk_type":{"type":"string", "description":"可选：指定风险类型（如：SQL注入、XSS、文件上传等）。建议先调用 list_knowledge_risk_types 工具获取可用的风险类型列表，然后使用正确的风险类型进行精确搜索，这样可以大幅减少检索时间。如果不指定则搜索所有类型。"}
+                }, "required":["query"]}
+                """,
+                (args) -> {
+                    String query = args.has("query") ? args.get("query").asText() : "";
+                    String riskType = args.has("risk_type") ? args.get("risk_type").asText() : "";
+
+                    if (query == null || query.isEmpty()) {
+                        return "错误: 查询参数不能为空";
+                    }
+
+                    try {
+                        log.info("执行知识库检索, query: {}, riskType: {}", query, riskType);
+
+                        // 执行混合检索
+                        List<com.cyberstrike.service.KnowledgeRetriever.RetrievalResult> results =
+                                knowledgeService.searchWithChunks(query, riskType, 5, 0.7);
+
+                        // 记录知识检索统计（类似 skill 模块的记录方式）
+                        knowledgeService.recordKnowledgeRetrieval(query, !results.isEmpty());
+
+                        if (results.isEmpty()) {
+                            return String.format("未找到与查询 '%s' 相关的知识。建议：\n1. 尝试使用不同的关键词\n2. 检查风险类型是否正确\n3. 确认知识库中是否包含相关内容", query);
+                        }
+
+                        // 按文档分组结果
+                        Map<String, List<com.cyberstrike.service.KnowledgeRetriever.RetrievalResult>> resultsByItem = new LinkedHashMap<>();
+                        for (com.cyberstrike.service.KnowledgeRetriever.RetrievalResult result : results) {
+                            String itemId = result.getItem().getId();
+                            resultsByItem.computeIfAbsent(itemId, k -> new ArrayList<>()).add(result);
+                        }
+
+                        // 按最高混合分数排序文档组
+                        List<Map.Entry<String, List<com.cyberstrike.service.KnowledgeRetriever.RetrievalResult>>> sortedGroups =
+                                resultsByItem.entrySet().stream()
+                                        .sorted((a, b) -> {
+                                            double maxScoreA = a.getValue().stream()
+                                                    .mapToDouble(com.cyberstrike.service.KnowledgeRetriever.RetrievalResult::getScore).max().orElse(0);
+                                            double maxScoreB = b.getValue().stream()
+                                                    .mapToDouble(com.cyberstrike.service.KnowledgeRetriever.RetrievalResult::getScore).max().orElse(0);
+                                            return Double.compare(maxScoreB, maxScoreA);
+                                        })
+                                        .collect(Collectors.toList());
+
+                        // 收集检索到的知识项ID
+                        List<String> retrievedItemIds = new ArrayList<>();
+
+                        StringBuilder sb = new StringBuilder();
+                        sb.append(String.format("找到 %d 条相关知识（包含上下文扩展）：\n\n", results.size()));
+
+                        int resultIndex = 1;
+                        for (Map.Entry<String, List<com.cyberstrike.service.KnowledgeRetriever.RetrievalResult>> entry : sortedGroups) {
+                            List<com.cyberstrike.service.KnowledgeRetriever.RetrievalResult> itemResults = entry.getValue();
+
+                            // 找到混合分数最高的作为主结果
+                            com.cyberstrike.service.KnowledgeRetriever.RetrievalResult mainResult = itemResults.stream()
+                                    .max(Comparator.comparingDouble(com.cyberstrike.service.KnowledgeRetriever.RetrievalResult::getScore))
+                                    .orElse(itemResults.get(0));
+
+                            // 按 chunk_index 排序
+                            itemResults.sort(Comparator.comparingInt(r -> r.getChunk().getChunkIndex()));
+
+                            // 显示主结果
+                            sb.append(String.format("--- 结果 %d (相似度: %.2f%%, 混合分数: %.2f%%) ---\n",
+                                    resultIndex, mainResult.getSimilarity() * 100, mainResult.getScore() * 100));
+                            sb.append(String.format("来源: [%s] %s (ID: %s)\n",
+                                    mainResult.getItem().getCategory(), mainResult.getItem().getTitle(), mainResult.getItem().getId()));
+
+                            // 显示内容片段
+                            if (itemResults.size() == 1) {
+                                sb.append(String.format("内容片段:\n%s\n", mainResult.getChunk().getChunkText()));
+                            } else {
+                                sb.append("内容片段（按文档顺序）:\n");
+                                for (int i = 0; i < itemResults.size(); i++) {
+                                    com.cyberstrike.service.KnowledgeRetriever.RetrievalResult r = itemResults.get(i);
+                                    String marker = r.getChunk().getId().equals(mainResult.getChunk().getId()) ? " [主匹配]" : "";
+                                    sb.append(String.format("  [片段 %d%s]\n%s\n", i + 1, marker, r.getChunk().getChunkText()));
+                                }
+                            }
+                            sb.append("\n");
+
+                            retrievedItemIds.add(entry.getKey());
+                            resultIndex++;
+                        }
+
+                        // 添加元数据
+                        if (!retrievedItemIds.isEmpty()) {
+                            sb.append(String.format("\n<!-- METADATA: {\"retrievedItemIDs\": %s} -->",
+                                    retrievedItemIds));
+                        }
+
+                        return sb.toString();
+                    } catch (Exception e) {
+                        log.error("知识库检索失败", e);
+                        // 记录检索失败
+                        knowledgeService.recordKnowledgeRetrieval(query, false);
+                        return "检索失败: " + e.getMessage();
+                    }
+                },
+                "Knowledge");  // 设置 toolType 为 Knowledge
     }
 
     /**
@@ -553,9 +677,17 @@ public class ToolRegistry {
 
     public void registerBuiltinTool(String name, String description, String parametersJson,
             Function<JsonNode, String> executor) {
+        registerBuiltinTool(name, description, parametersJson, executor, "MCP");
+    }
+
+    /**
+     * 注册内置工具（带 toolType）
+     */
+    public void registerBuiltinTool(String name, String description, String parametersJson,
+            Function<JsonNode, String> executor, String toolType) {
         try {
             JsonNode params = objectMapper.readTree(parametersJson);
-            builtinTools.put(name, new ToolDefinition(name, description, params, executor));
+            builtinTools.put(name, new ToolDefinition(name, description, params, executor, toolType));
         } catch (JsonProcessingException e) {
             log.error("解析工具参数失败: " + name, e);
         }

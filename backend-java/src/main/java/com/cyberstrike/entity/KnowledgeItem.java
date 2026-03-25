@@ -3,8 +3,13 @@ package com.cyberstrike.entity;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
+/**
+ * 【Go -> Java 迁移】知识库项实体
+ * 对齐 Go 结构体：internal/knowledge/types.go KnowledgeItem
+ * 对应数据库表：knowledge_base_items
+ */
 @Entity
-@Table(name = "knowledge_items")
+@Table(name = "knowledge_base_items")
 public class KnowledgeItem {
 
     @Id
@@ -14,11 +19,11 @@ public class KnowledgeItem {
 
     private String title;
 
-    @Column(columnDefinition = "TEXT")
-    private String content;
+    @Column(name = "file_path")
+    private String filePath;
 
-    @Column(columnDefinition = "TEXT")
-    private String embedding; // JSON array of floats
+    @Column(columnDefinition = "LONGTEXT")
+    private String content;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -51,20 +56,20 @@ public class KnowledgeItem {
         this.title = title;
     }
 
+    public String getFilePath() {
+        return filePath;
+    }
+
+    public void setFilePath(String filePath) {
+        this.filePath = filePath;
+    }
+
     public String getContent() {
         return content;
     }
 
     public void setContent(String content) {
         this.content = content;
-    }
-
-    public String getEmbedding() {
-        return embedding;
-    }
-
-    public void setEmbedding(String embedding) {
-        this.embedding = embedding;
     }
 
     public LocalDateTime getCreatedAt() {

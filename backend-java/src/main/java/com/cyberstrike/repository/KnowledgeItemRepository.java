@@ -6,20 +6,23 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface KnowledgeItemRepository extends JpaRepository<KnowledgeItem, String> {
 
-    List<KnowledgeItem> findByCategoryOrderByCreatedAtDesc(String category);
+    List<KnowledgeItem> findByCategoryOrderByTitle(String category);
 
     List<KnowledgeItem> findAllByOrderByUpdatedAtDesc();
 
-    List<KnowledgeItem> findByTitleContainingOrContentContainingOrderByCreatedAtDesc(String titleKeyword,
+    List<KnowledgeItem> findByTitleContainingIgnoreCaseOrContentContainingIgnoreCaseOrderByCreatedAtDesc(String titleKeyword,
             String contentKeyword);
 
-    @Query("SELECT DISTINCT k.category FROM KnowledgeItem k")
+    @Query("SELECT DISTINCT k.category FROM KnowledgeItem k ORDER BY k.category")
     List<String> findDistinctCategories();
 
-    @Query("SELECT COUNT(k) FROM KnowledgeItem k WHERE k.embedding IS NOT NULL AND k.embedding != ''")
-    long countIndexed();
+    @Query("SELECT COUNT(k) FROM KnowledgeItem k")
+    long countAll();
+
+    Optional<KnowledgeItem> findByTitleAndCategory(String title, String category);
 }
