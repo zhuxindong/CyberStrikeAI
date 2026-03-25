@@ -1,5 +1,5 @@
 <template>
-  <div class="skill-manage">
+  <div class="skill-management">
     <div class="actions">
       <el-button type="primary" @click="addSkill">创建Skill</el-button>
     </div>
@@ -114,7 +114,7 @@ const deleteSkill = async (name: string) => {
 </script>
 
 <style lang="scss" scoped>
-.skill-manage {
+.skill-management {
   padding: 20px;
   height: 100%;
 

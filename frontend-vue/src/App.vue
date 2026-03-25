@@ -54,14 +54,14 @@ const route = useRoute();
         </el-sub-menu>
         <el-sub-menu index="skills">
           <template #title>
-            <el-icon><Collection /></el-icon>
+            <el-icon><Key /></el-icon>
             <span class="nav-label">Skills</span>
           </template>
           <el-menu-item-group>
             <el-menu-item index="/skill-monitor">
               <span class="nav-label">Skills状态监控</span>
             </el-menu-item>
-            <el-menu-item index="/skill-manage">
+            <el-menu-item index="/skill-management">
               <span class="nav-label">Skills管理</span>
             </el-menu-item>
           </el-menu-item-group>

@@ -103,7 +103,7 @@
                 </div>
               </div>
             </div>
-            <div @click="goPage('skills')">
+            <div @click="goPage('skill-monitor')">
               <el-icon>
                 <Document />
               </el-icon>
@@ -114,11 +114,11 @@
                 </div>
                 <div class="dashboard-overview-value-group">
                   <span>
-                    <span class="dashboard-overview-value-large">0</span>
+                    <span class="dashboard-overview-value-large">{{ skillInfo.totalCalls }}</span>
                     <span class="dashboard-overview-value-unit">次调用</span>
                   </span>
                   <span>
-                    <span>0</span>
+                    <span>{{ skillInfo.totalSkills }}</span>
                     <span class="dashboard-overview-value-unit">个Skill</span>
                   </span>
                 </div>
@@ -258,6 +258,10 @@ const toolInfo = ref({
   total: 0,
   successRate: 0
 });
+const skillInfo = ref({
+  totalCalls: 0,
+  totalSkills: 0
+});
 
 interface ToolCall {
   toolName: string;
@@ -269,6 +273,7 @@ onMounted(() => {
   getTaskInfo();
   getVulnInfo();
   getToolInfo();
+  getSkillInfo();
 });
 
 // 任务
@@ -324,6 +329,18 @@ const getToolInfo = async () => {
         count: item[toolName]
       };
     });
+  }
+};
+
+// Skills
+const getSkillInfo = async () => {
+  const res = await fetch('/api/skills/stats');
+  if (res.ok) {
+    const data = await res.json();
+    skillInfo.value = {
+      totalCalls: data.total_calls,
+      totalSkills: data.total_skills
+    };
   }
 };
 
@@ -704,7 +721,7 @@ const goPage = (path: string) => {
 
         >.dashboard-tools-bar {
           display: grid;
-          grid-template-columns: 82px 1fr 36px;
+          grid-template-columns: 1fr 36px;
           gap: 12px;
           align-items: center;
           font-size: 0.8125rem;

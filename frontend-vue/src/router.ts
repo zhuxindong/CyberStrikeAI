@@ -22,6 +22,11 @@ const router = createRouter({
       component: () => import('./components/BatchQueueView.vue')
     },
     {
+      name: '检索历史',
+      path: '/knowledge-retrieval-logs',
+      component: () => import('./components/KnowledgeRetrieval.vue')
+    },
+    {
       name: '知识库管理',
       path: '/knowledge-management',
       component: () => import('./components/KnowledgeView.vue')
@@ -33,7 +38,7 @@ const router = createRouter({
     },
     {
       name: 'Skills管理',
-      path: '/skill-manage',
+      path: '/skill-management',
       component: () => import('./components/SkillManage.vue')
     },
     {

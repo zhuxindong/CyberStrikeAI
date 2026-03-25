@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, useTemplateRef } from 'vue';
-import { ElMessage, ElMessageBox, FormContext, FormRules, SelectOptionProps } from 'element-plus';
-import { Search, Refresh, Plus, Delete, Edit } from '@element-plus/icons-vue';
+import { dayjs, ElMessage, ElMessageBox, FormContext, FormRules, SelectOptionProps } from 'element-plus';
+import { Refresh, Plus, Delete, Edit } from '@element-plus/icons-vue';
+import { debounce } from '@/utils/debounce';
+
+interface KnowledgeStats {
+  catogoryCount: number;
+  catogoryCountInCurrentPage: number;
+  itemCountInCurrentPage: number;
+}
 
 interface KnowledgeItem {
   id: string;
@@ -10,16 +17,21 @@ interface KnowledgeItem {
   content: string;
   createdAt?: string;
   updatedAt?: string;
-  embedding?: string;
+  filePath?: string;
 }
 
 interface KnowledgeCategory {
-  title: string;
+  category: string;
   items: KnowledgeItem[];
 }
 
+const knowledgeStats = ref<KnowledgeStats>({
+  catogoryCount: 0,
+  catogoryCountInCurrentPage: 0,
+  itemCountInCurrentPage: 0
+});
 const categories = ref<KnowledgeCategory[]>([]);
-const currentCategory = ref();
+const currentCategory = ref('');
 const categoryOptions = ref<SelectOptionProps[]>([]);
 const searchQuery = ref('');
 const loading = ref(false);
@@ -46,80 +58,83 @@ const currentItem = ref<KnowledgeItem>({
   content: ''
 });
 
-const formRef = useTemplateRef<FormContext>('form');
-
 const loadItems = async () => {
   loading.value = true;
-  try {
-    const res = await fetch('/api/knowledge');
-    if (res.ok) {
-      categories.value = await res.json();
-      // filterItems();
+  let query = '?';
+  query += `category=${currentCategory.value || ''}`;
+  query += `&search=${searchQuery.value}`;
+  const res = await fetch(`/api/knowledge/items${query}`);
+  loading.value = false;
+  if (res.ok) {
+    const data = await res.json();
+    if (data.categories instanceof Array) {
+      categories.value = data.categories;
+    } else {
+      categories.value = [];
     }
-  } catch (e) {
-    ElMessage.error('Connection error');
-  } finally {
-    loading.value = false;
+    let itemCount = 0;
+    categoryOptions.value = categories.value.map(cat => {
+      itemCount += cat.items.length;
+      cat.items.forEach(item => {
+        item.updatedAt = dayjs(item.updatedAt).format('YYYY-MM-DD HH:mm:ss');
+      });
+      return {
+        label: cat.category,
+        value: cat.category
+      };
+    });
+    knowledgeStats.value = {
+      catogoryCount: data.total,
+      catogoryCountInCurrentPage: categories.value.length,
+      itemCountInCurrentPage: itemCount
+    };
   }
 };
-
-// const filterItems = () => {
-//   if (!searchQuery.value) {
-//     filteredItems.value = items.value;
-//   } else {
-//     const q = searchQuery.value.toLowerCase();
-//     filteredItems.value = items.value.filter(item => 
-//       item.title.toLowerCase().includes(q) || 
-//       item.content.toLowerCase().includes(q) ||
-//       item.category.toLowerCase().includes(q)
-//     );
-//   }
-// };
-
-const handleSearch = () => {
-  // filterItems();
+const debouncedSearch = debounce(loadItems, 300);
+const loadItemDetail = async (id: string) => {
+  const res = await fetch(`/api/knowledge/items/${id}`);
+  if (res.ok) {
+    const data = await res.json();
+    currentItem.value = data;
+  }
 };
 
 const handleRebuildIndex = async () => {
-  try {
-    const res = await fetch('/api/knowledge/index', { method: 'POST' });
-    if (res.ok) {
-      ElMessage.success('Index rebuild triggered in background');
-    } else {
-      ElMessage.error('Failed to trigger index rebuild');
-    }
-  } catch (e) {
-    ElMessage.error('Error triggering index rebuild');
+  const res = await fetch('/api/knowledge/index', { method: 'POST' });
+  if (res.ok) {
+    const data = await res.json();
+    ElMessage.success(data.message);
+  } else {
+    ElMessage.error('重建索引失败');
   }
 };
 
+const formRef = useTemplateRef<FormContext>('form');
+const onClose = () => {
+  formRef.value?.resetFields();
+};
 const handleAdd = () => {
   isEdit.value = false;
-  currentItem.value = { id: '', category: 'General', title: '', content: '' };
   dialogVisible.value = true;
 };
 
-const handleEdit = (item: KnowledgeItem) => {
+const handleEdit = (id: string) => {
   isEdit.value = true;
-  currentItem.value = { ...item };
   dialogVisible.value = true;
+  loadItemDetail(id);
 };
 
 const handleDelete = async (id: string) => {
-  try {
-    await ElMessageBox.confirm('Are you sure you want to delete this item?', 'Warning', {
-      type: 'warning'
-    });
-    
-    const res = await fetch(`/api/knowledge/${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      ElMessage.success('Item deleted');
-      loadItems();
-    } else {
-      ElMessage.error('Failed to delete item');
-    }
-  } catch (e) {
-    // cancelled
+  await ElMessageBox.confirm('确定要删除这个知识项吗？', '删除知识项', {
+    type: 'warning'
+  });
+  
+  const res = await fetch(`/api/knowledge/items/${id}`, { method: 'DELETE' });
+  if (res.ok) {
+    ElMessage.success('删除成功');
+    loadItems();
+  } else {
+    ElMessage.error('删除失败');
   }
 };
 
@@ -129,7 +144,7 @@ const handleSave = async () => {
     return;
   }
   try {
-    const url = isEdit.value ? `/api/knowledge/${currentItem.value.id}` : '/api/knowledge';
+    const url = isEdit.value ? `/api/knowledge/items/${currentItem.value.id}` : '/api/knowledge/items';
     const method = isEdit.value ? 'PUT' : 'POST';
     
     const res = await fetch(url, {
@@ -150,22 +165,6 @@ const handleSave = async () => {
   }
 };
 
-// Also verify search endpoint
-const testSearch = async () => {
-    if (!searchQuery.value) return;
-    try {
-        const res = await fetch(`/api/knowledge/search?query=${encodeURIComponent(searchQuery.value)}`);
-        if (res.ok) {
-            const results = await res.json();
-            ElMessage.success(`Found ${results.length} semantic matches`);
-            // Could display these specially, but for now just console log
-            console.log("Vector Search Results:", results);
-        }
-    } catch(e) {
-        console.error(e);
-    }
-}
-
 onMounted(() => {
   loadItems();
 });
@@ -175,71 +174,41 @@ onMounted(() => {
   <div class="knowledge-view">
     <div class="knowledge-stats-bar">
       <div>
-        <div class="knowledge-stat-label">总知识项</div>
-        <div class="knowledge-stat-value">-</div>
+        <div class="knowledge-stat-label">总分类数</div>
+        <div class="knowledge-stat-value">{{ knowledgeStats.catogoryCount }}</div>
       </div>
       <div>
-        <div class="knowledge-stat-label">分类数</div>
-        <div class="knowledge-stat-value">-</div>
+        <div class="knowledge-stat-label">当前页分类</div>
+        <div class="knowledge-stat-value">{{ knowledgeStats.catogoryCountInCurrentPage }} 个</div>
       </div>
       <div>
-        <div class="knowledge-stat-label">总内容</div>
-        <div class="knowledge-stat-value">-</div>
+        <div class="knowledge-stat-label">当前页知识项</div>
+        <div class="knowledge-stat-value">{{ knowledgeStats.itemCountInCurrentPage }} 项</div>
       </div>
     </div>
-    <div class="toolbar">
-      <el-form inline label-width="5em" label-position="top">
-        <el-form-item label="分类筛选">
-          <el-select v-model="currentCategory" placeholder="请选择">
-            <el-option v-for="{ label, value } in categoryOptions" :label="label" :value="value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="搜索">
-          <el-input v-model="searchQuery" placeholder="搜索知识..." :prefix-icon="Search" clearable
-            @input="handleSearch" @keyup.enter="testSearch">
-            <template #append>
-              <el-button icon="Search">搜索</el-button>
-            </template>
-          </el-input>
-        </el-form-item>
-      </el-form>
-      <div class="actions">
+    <el-form class="toolbar" inline label-width="5em" label-position="top">
+      <el-form-item label="分类筛选">
+        <el-select v-model="currentCategory" clearable placeholder="请选择" @change="loadItems">
+          <el-option v-for="{ label, value } in categoryOptions" :label="label" :value="value" />
+        </el-select>
+      </el-form-item>
+      <el-form-item>
+        <el-input v-model="searchQuery" placeholder="搜索知识..." clearable @input="debouncedSearch" @keyup.enter="loadItems">
+          <template #append>
+            <el-button icon="Search" @click="loadItems">搜索</el-button>
+          </template>
+        </el-input>
+      </el-form-item>
+      <el-form-item>
         <el-button @click="handleRebuildIndex" :icon="Refresh">重建索引</el-button>
         <el-button type="primary" @click="handleAdd" :icon="Plus">添加知识</el-button>
-      </div>
-    </div>
+      </el-form-item>
+    </el-form>
 
-    <!-- <div class="content-list" v-loading="loading">
-      <template v-if="items.length === 0">
-        <el-empty description="暂无知识" />
-      </template>
-      <div v-else class="cards-grid">
-        <el-card v-for="item in items" :key="item.id" class="item-card" shadow="hover">
-          <template #header>
-            <div class="card-header">
-              <span class="title" :title="item.title">{{ item.title }}</span>
-              <el-tag size="small">{{ item.category }}</el-tag>
-            </div>
-          </template>
-          <div class="card-body">
-            <div class="preview">{{ item.content.substring(0, 150) }}...</div>
-            <div class="meta">
-              <span>Updated: {{ item.updatedAt ? new Date(item.updatedAt).toLocaleString() : 'N/A' }}</span>
-              <el-tag v-if="!item.embedding" type="warning" size="small">Not Indexed</el-tag>
-            </div>
-          </div>
-          <div class="card-actions">
-            <el-button link type="primary" :icon="Edit" @click="handleEdit(item)">Edit</el-button>
-            <el-button link type="danger" :icon="Delete" @click="handleDelete(item.id)">Delete</el-button>
-          </div>
-        </el-card>
-      </div>
-    </div> -->
-
-    <div class="content-list" v-loading="loading">
-      <div v-for="{ title, items } in categories" :key="title" class="knowledge-category-section">
+    <div v-if="categories.length" class="content-list" v-loading="loading">
+      <div v-for="{ category, items } in categories" class="knowledge-category-section">
         <div class="knowledge-category-header">
-          <h3>📁 {{ title }}</h3>
+          <h3>📁 {{ category }}</h3>
           <el-tag type="primary" size="large">{{ items.length }} 项</el-tag>
         </div>
         <div class="knowledge-items-grid">
@@ -247,7 +216,7 @@ onMounted(() => {
             <div class="knowledge-item-card-header">
               <h3>{{ item.title }}</h3>
               <div class="knowledge-item-card-actions">
-                <span @click="handleEdit(item)">
+                <span @click="handleEdit(item.id)">
                   <el-icon><Edit /></el-icon>
                 </span>
                 <span @click="handleDelete(item.id)">
@@ -255,14 +224,15 @@ onMounted(() => {
                 </span>
               </div>
             </div>
-            <div class="knowledge-item-path">📁 {{ item.content }}</div>
+            <div class="knowledge-item-path">📁 {{ item.filePath }}</div>
             <div class="knowledge-item-card-footer">🕒 {{ item.updatedAt }}</div>
           </div>
         </div>
       </div>
     </div>
+    <el-empty v-else description="暂无知识" />
 
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑知识' : '添加知识'" width="600px">
+    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑知识' : '添加知识'" width="600px" @close="onClose">
       <el-form ref="form" :model="currentItem" :rules="rules" label-position="top">
         <el-form-item label="分类（风险类型）" prop="category">
           <el-input v-model="currentItem.category" placeholder="例如: SQL 注入" />
@@ -293,6 +263,7 @@ onMounted(() => {
   flex-direction: column;
   padding: 16px;
   gap: 16px;
+  overflow: auto;
 
   .knowledge-stats-bar {
     display: flex;
@@ -319,23 +290,23 @@ onMounted(() => {
 
 .toolbar {
   display: flex;
+  flex-wrap: nowrap;
   justify-content: space-between;
-  align-items: center;
-  background: white;
+  align-items: end;
   padding: 16px;
   border-radius: 8px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.05);
 
-  .el-select {
-    width: 160px;
-  }
-
-  .el-input {
-    width: 600px;
-  }
-
-  .actions {
-    min-width: 200px;
+  .el-form-item {
+    &:nth-child(1) {
+      width: 20%;
+    }
+    &:nth-child(2) {
+      width: 60%;
+    }
+    &:last-child {
+      width: 20%;
+    }
   }
 }
 
@@ -357,7 +328,7 @@ onMounted(() => {
       padding-bottom: 16px;
       border-bottom: 2px solid var(--border-color);
       display: flex;
-      align-items: baseline;
+      align-items: center;
 
       >h3 {
         margin-right: 16px;
@@ -419,6 +390,21 @@ onMounted(() => {
           color: var(--text-secondary);
           cursor: pointer;
           transition: all 0.2s ease;
+
+          &:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+            transform: scale(1.05);
+          }
+          &:last-child {
+            &:hover {
+              background: var(--bg-tertiary);
+              border-color: var(--error-color);
+              color: var(--error-color);
+              transform: scale(1.05);
+            }
+          }
         }
       }
 
