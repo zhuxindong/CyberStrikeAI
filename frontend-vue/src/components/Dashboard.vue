@@ -345,9 +345,9 @@ const getKnowledgeInfo = async () => {
   const res = await fetch('/api/knowledge/items');
   if (res.ok) {
     const data = await res.json();
-    let categoryCount = 0, knowledgeCount = 0;
+    let categoryCount = data.categories.length, knowledgeCount = 0;
     data.categories.forEach((cat: any) => {
-      knowledgeCount += cat.items.length;
+      knowledgeCount += cat.itemCount;
     });
     const status = categoryCount > 0 || knowledgeCount > 0 ? '已启用' : '待使用';
     const tagType = status === '待使用' ? 'info' : 'success';
