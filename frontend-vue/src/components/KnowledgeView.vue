@@ -143,25 +143,21 @@ const handleSave = async () => {
   if (!valid) {
     return;
   }
-  try {
-    const url = isEdit.value ? `/api/knowledge/items/${currentItem.value.id}` : '/api/knowledge/items';
-    const method = isEdit.value ? 'PUT' : 'POST';
-    
-    const res = await fetch(url, {
-      method: method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(currentItem.value)
-    });
-    
-    if (res.ok) {
-      ElMessage.success(isEdit.value ? 'Item updated' : 'Item created');
-      dialogVisible.value = false;
-      loadItems();
-    } else {
-      ElMessage.error('Failed to save item');
-    }
-  } catch (e) {
-    ElMessage.error('Error saving item');
+  const url = isEdit.value ? `/api/knowledge/items/${currentItem.value.id}` : '/api/knowledge/items';
+  const method = isEdit.value ? 'PUT' : 'POST';
+  
+  const res = await fetch(url, {
+    method: method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(currentItem.value)
+  });
+  
+  if (res.ok) {
+    ElMessage.success(isEdit.value ? '修改成功' : '添加成功');
+    dialogVisible.value = false;
+    loadItems();
+  } else {
+    ElMessage.error(isEdit.value ? '修改失败' : '添加失败');
   }
 };
 

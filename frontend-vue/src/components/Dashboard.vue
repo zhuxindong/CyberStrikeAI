@@ -89,15 +89,15 @@
               <div class="dashboard-overview-content">
                 <div class="dashboard-overview-header">
                   <span>知识</span>
-                  <el-tag type="info" round>未启用</el-tag>
+                  <el-tag :type="knowledgeInfo.tagType" round>{{ knowledgeInfo.status }}</el-tag>
                 </div>
                 <div class="dashboard-overview-value-group">
                   <span>
-                    <span class="dashboard-overview-value-large">-</span>
+                    <span class="dashboard-overview-value-large">{{ knowledgeInfo.knowledgeCount }}</span>
                     <span class="dashboard-overview-value-unit">项知识</span>
                   </span>
                   <span>
-                    <span>-</span>
+                    <span>{{ knowledgeInfo.categoryCount }}</span>
                     <span class="dashboard-overview-value-unit">个分类</span>
                   </span>
                 </div>
@@ -110,7 +110,7 @@
               <div class="dashboard-overview-content">
                 <div class="dashboard-overview-header">
                   <span>Skills</span>
-                  <el-tag type="info" round>待使用</el-tag>
+                  <el-tag :type="skillInfo.tagType" round>{{ skillInfo.status }}</el-tag>
                 </div>
                 <div class="dashboard-overview-value-group">
                   <span>
@@ -157,7 +157,6 @@
             <template v-if="toolCalls.length">
               <div class="dashboard-tools-bar" v-for="item in toolCalls">
                 <span class="dashboard-tools-bar-label">{{ item.toolName }}</span>
-                <!-- <el-progress :percentage="100" status="success" :show-text="false" /> -->
                 <span class="dashboard-tools-bar-value">{{ item.count }}</span>
               </div>
             </template>
@@ -258,9 +257,17 @@ const toolInfo = ref({
   total: 0,
   successRate: 0
 });
+const knowledgeInfo = ref({
+  knowledgeCount: 0,
+  categoryCount: 0,
+  status: '',
+  tagType: 'info'
+});
 const skillInfo = ref({
   totalCalls: 0,
-  totalSkills: 0
+  totalSkills: 0,
+  status: '',
+  tagType: 'info'
 });
 
 interface ToolCall {
@@ -273,6 +280,7 @@ onMounted(() => {
   getTaskInfo();
   getVulnInfo();
   getToolInfo();
+  getKnowledgeInfo();
   getSkillInfo();
 });
 
@@ -286,7 +294,7 @@ const getTaskInfo = async () => {
       stage.count = data[key];
       stage.percent = data.total === 0 ? 0 : data[key] / data.total * 100;
     });
-    summary.value.runningTask = data.running;
+    summary.value.runningTask = data.running || 0;
     summary.value.taskTotal = data.total;
   }
 };
@@ -332,14 +340,47 @@ const getToolInfo = async () => {
   }
 };
 
+// 知识
+const getKnowledgeInfo = async () => {
+  const res = await fetch('/api/knowledge/items');
+  if (res.ok) {
+    const data = await res.json();
+    let categoryCount = 0, knowledgeCount = 0;
+    data.categories.forEach((cat: any) => {
+      knowledgeCount += cat.items.length;
+    });
+    const status = categoryCount > 0 || knowledgeCount > 0 ? '已启用' : '待使用';
+    const tagType = status === '待使用' ? 'info' : 'success';
+    knowledgeInfo.value = {
+      knowledgeCount,
+      categoryCount,
+      status,
+      tagType
+    };
+  }
+};
+
 // Skills
 const getSkillInfo = async () => {
   const res = await fetch('/api/skills/stats');
   if (res.ok) {
     const data = await res.json();
+    const { total_calls, total_skills } = data;
+    let status = '', tagType = 'info';
+    if (total_calls === 0) {
+      status = '待使用';
+    } else if (total_calls < 10) {
+      status = '活跃';
+      tagType = 'success';
+    } else {
+      status = '高频';
+      tagType = 'primary';
+    }
     skillInfo.value = {
-      totalCalls: data.total_calls,
-      totalSkills: data.total_skills
+      totalCalls: total_calls,
+      totalSkills: total_skills,
+      status,
+      tagType
     };
   }
 };

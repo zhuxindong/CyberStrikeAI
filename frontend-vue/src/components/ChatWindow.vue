@@ -473,7 +473,7 @@ const renderMarkdown = (text: string | undefined) => {
       </el-scrollbar>
     </div>
     <div class="messages-area" ref="messagesContainer">
-      <div v-if="messages.length === 0" class="empty-state">
+      <div v-if="!currentConversationId" class="empty-state">
         <el-icon :size="64" class="icon"><Monitor /></el-icon>
         <h3>CyberStrike AI Ready</h3>
         <p>Enter a target or command to start the investigation.</p>
