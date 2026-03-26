@@ -392,10 +392,9 @@ public class ToolRegistry {
                         List<com.cyberstrike.service.KnowledgeRetriever.RetrievalResult> results =
                                 knowledgeService.searchWithChunks(query, riskType, 5, 0.7);
 
-                        // 记录知识检索统计（类似 skill 模块的记录方式）
-                        knowledgeService.recordKnowledgeRetrieval(query, !results.isEmpty());
-
                         if (results.isEmpty()) {
+                            // 记录知识检索统计（无结果）
+                            knowledgeService.recordKnowledgeRetrieval(query, new java.util.ArrayList<>());
                             return String.format("未找到与查询 '%s' 相关的知识。建议：\n1. 尝试使用不同的关键词\n2. 检查风险类型是否正确\n3. 确认知识库中是否包含相关内容", query);
                         }
 
@@ -405,6 +404,12 @@ public class ToolRegistry {
                             String itemId = result.getItem().getId();
                             resultsByItem.computeIfAbsent(itemId, k -> new ArrayList<>()).add(result);
                         }
+
+                        // 收集检索到的知识项 ID 列表
+                        List<String> retrievedItemIds = new ArrayList<>(resultsByItem.keySet());
+
+                        // 记录知识检索统计（类似 skill 模块的记录方式）
+                        knowledgeService.recordKnowledgeRetrieval(query, retrievedItemIds);
 
                         // 按最高混合分数排序文档组
                         List<Map.Entry<String, List<com.cyberstrike.service.KnowledgeRetriever.RetrievalResult>>> sortedGroups =
@@ -418,9 +423,7 @@ public class ToolRegistry {
                                         })
                                         .collect(Collectors.toList());
 
-                        // 收集检索到的知识项ID
-                        List<String> retrievedItemIds = new ArrayList<>();
-
+                        // 构建结果字符串
                         StringBuilder sb = new StringBuilder();
                         sb.append(String.format("找到 %d 条相关知识（包含上下文扩展）：\n\n", results.size()));
 

@@ -2,12 +2,14 @@ package com.cyberstrike.entity;
 
 
 import jakarta.persistence.*;
+import lombok.Data;
 
 /**
  * 系统配置实体类
  */
 @Entity
 @Table(name = "config")
+@Data
 public class Config {
 
     /**
@@ -54,74 +56,22 @@ public class Config {
     @Column(name = "theme", length = 10)
     private String theme;
 
-    // ==================== Getter 和 Setter ====================
+    /**
+     * API密钥
+     */
+    @Column(name = "em_api_key", length = 255)
+    private String emApiKey;
 
-    public Long getId() {
-        return id;
-    }
+    /**
+     * 基础URL
+     */
+    @Column(name = "em_base_url", length = 255)
+    private String emBaseUrl;
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+    /**
+     * 模型名称
+     */
+    @Column(name = "em_model", length = 255)
+    private String emModel;
 
-    public String getApiKey() {
-        return apiKey;
-    }
-
-    public void setApiKey(String apiKey) {
-        this.apiKey = apiKey;
-    }
-
-    public String getBaseUrl() {
-        return baseUrl;
-    }
-
-    public void setBaseUrl(String baseUrl) {
-        this.baseUrl = baseUrl;
-    }
-
-    public String getModel() {
-        return model;
-    }
-
-    public void setModel(String model) {
-        this.model = model;
-    }
-
-    public Integer getMaxIterations() {
-        return maxIterations;
-    }
-
-    public void setMaxIterations(Integer maxIterations) {
-        this.maxIterations = maxIterations;
-    }
-
-    public String getLanguage() {
-        return language;
-    }
-
-    public void setLanguage(String language) {
-        this.language = language;
-    }
-
-    public String getTheme() {
-        return theme;
-    }
-
-    public void setTheme(String theme) {
-        this.theme = theme;
-    }
-
-    @Override
-    public String toString() {
-        return "Config{" +
-                "id=" + id +
-                ", apiKey='" + apiKey + '\'' +
-                ", baseUrl='" + baseUrl + '\'' +
-                ", model='" + model + '\'' +
-                ", maxIterations=" + maxIterations +
-                ", language='" + language + '\'' +
-                ", theme='" + theme + '\'' +
-                '}';
-    }
 }

@@ -56,7 +56,7 @@ public class KnowledgeService {
      * 记录知识检索统计（类似 SkillsStatsService.recordSkillCall）
      * 在 builtinTools.put 注册的工具执行时调用
      */
-    public void recordKnowledgeRetrieval(String query, boolean success) {
+    public void recordKnowledgeRetrieval(String query, List<String> retrievedItemIds) {
         try {
             // 从 ToolContext 获取当前 conversationId 和 messageId
             String conversationId = ToolContext.getConversationId();
@@ -68,15 +68,25 @@ public class KnowledgeService {
             log.setConversationId(conversationId);
             log.setMessageId(messageId);
             log.setQuery(query);
-            log.setRetrievedItems(success ? "retrieved" : "failed");
+            // 记录检索到的知识项 ID 列表
+            log.setRetrievedItems(retrievedItemIds != null && !retrievedItemIds.isEmpty() ? 
+                    String.join(",", retrievedItemIds) : "");
             log.setCreatedAt(LocalDateTime.now());
             retrievalLogRepository.save(log);
             
-            logger.debug("记录知识检索统计: conversationId={}, messageId={}, query={}, success={}", 
-                    conversationId, messageId, query, success);
+            logger.debug("记录知识检索统计: conversationId={}, messageId={}, query={}, retrievedCount={}", 
+                    conversationId, messageId, query, 
+                    retrievedItemIds != null ? retrievedItemIds.size() : 0);
         } catch (Exception e) {
             logger.warn("记录知识检索统计失败: {}", e.getMessage());
         }
+    }
+
+    /**
+     * 记录知识检索统计（简单版本）
+     */
+    public void recordKnowledgeRetrieval(String query, boolean success) {
+        recordKnowledgeRetrieval(query, success ? java.util.Collections.singletonList("retrieved") : java.util.Collections.emptyList());
     }
 
     /**
