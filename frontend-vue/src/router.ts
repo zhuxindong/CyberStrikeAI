@@ -52,6 +52,11 @@ const router = createRouter({
       component: () => import('./components/VulnsView.vue')
     },
     {
+      name: 'WebShell管理',
+      path: '/webshell',
+      component: () => import('./components/Webshell/Index.vue')
+    },
+    {
       name: 'MCP监控',
       path: '/mcp-monitor',
       component: () => import('./components/MCPMonitor.vue')

@@ -4,7 +4,7 @@ import { Plus, ChatDotRound, Delete, Star, StarFilled, Search } from '@element-p
 import ConversationStore from "@/store/Conversation";
 import { storeToRefs } from 'pinia';
 
-interface Conversation {
+export interface Conversation {
   id: string;
   title: string;
   updatedAt: string;

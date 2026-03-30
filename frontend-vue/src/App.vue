@@ -74,6 +74,10 @@ const route = useRoute();
           <el-icon><Warning /></el-icon>
           <span class="nav-label">漏洞</span>
         </el-menu-item>
+        <el-menu-item index="/webshell">
+          <el-icon><FullScreen /></el-icon>
+          <span class="nav-label">Webshell管理</span>
+        </el-menu-item>
         <el-sub-menu index="mcp">
           <template #title>
             <el-icon><Connection /></el-icon>

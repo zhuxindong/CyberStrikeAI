@@ -260,13 +260,13 @@ const toolInfo = ref({
 const knowledgeInfo = ref({
   knowledgeCount: 0,
   categoryCount: 0,
-  status: '',
+  status: '待使用',
   tagType: 'info'
 });
 const skillInfo = ref({
   totalCalls: 0,
   totalSkills: 0,
-  status: '',
+  status: '待使用',
   tagType: 'info'
 });
 
