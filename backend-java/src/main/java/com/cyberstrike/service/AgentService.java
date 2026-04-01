@@ -157,6 +157,7 @@ public class AgentService {
     }
 
     public SseEmitter agentLoopStream(ChatRequest request) {
+
         SseEmitter emitter = new SseEmitter(30 * 60 * 1000L); // 30 mins timeout
         String conversationId = ensureConversation(request);
 
@@ -168,6 +169,12 @@ public class AgentService {
         Conversation conversation = conversationRepository.findById(conversationId).get();
         conversation.setStatus("running");
         conversation.setTaskId(taskId);
+        // 在处理请求时设置 WebShell 连接 ID
+        if (request.getWebshellConnectionId() != null && !request.getWebshellConnectionId().isEmpty()) {
+            ToolContext.setWebShellConnectionId(request.getWebshellConnectionId());
+            conversation.setWebshellConnectionId(request.getWebshellConnectionId());
+            log.info("设置 WebShell 连接 ID: {}", request.getWebshellConnectionId());
+        }
         conversationRepository.save(conversation);
         task.status = "running";
         task.message = request.getMessage().length() > 50

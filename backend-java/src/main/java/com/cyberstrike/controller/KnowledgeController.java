@@ -163,6 +163,30 @@ public class KnowledgeController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/items/list")
+    public ResponseEntity<?> getItems(@RequestParam(required = false) String ids) {
+        if (ids == null || ids.trim().isEmpty()) {
+            // 如果没有提供ids参数，返回所有项
+            return ResponseEntity.ok(repository.findAll());
+        }
+
+        // 按逗号分割ID，并过滤掉空字符串
+        List<String> idList = Arrays.stream(ids.split(","))
+                .map(String::trim)
+                .filter(id -> !id.isEmpty())
+                .collect(Collectors.toList());
+
+        // 查询所有匹配的项
+        List<KnowledgeItem> items = repository.findAllById(idList);
+
+        // 如果没有任何匹配项，返回404
+        if (items.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok(items);
+    }
+
     /**
      * 创建知识项
      * POST /api/knowledge/items

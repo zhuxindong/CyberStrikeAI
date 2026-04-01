@@ -56,11 +56,14 @@ public class KnowledgeService {
      * 记录知识检索统计（类似 SkillsStatsService.recordSkillCall）
      * 在 builtinTools.put 注册的工具执行时调用
      */
-    public void recordKnowledgeRetrieval(String query, List<String> retrievedItemIds) {
+    public void recordKnowledgeRetrieval(String query, String riskType, List<String> retrievedItemIds) {
         try {
             // 从 ToolContext 获取当前 conversationId 和 messageId
             String conversationId = ToolContext.getConversationId();
             String messageId = ToolContext.getMessageId();
+            
+            logger.info("记录知识检索统计: query={}, riskType={}, retrievedItemIds={}", 
+                    query, riskType, retrievedItemIds);
             
             // 记录检索日志
             RetrievalLog log = new RetrievalLog();
@@ -68,14 +71,15 @@ public class KnowledgeService {
             log.setConversationId(conversationId);
             log.setMessageId(messageId);
             log.setQuery(query);
+            log.setRiskType(riskType);
             // 记录检索到的知识项 ID 列表
             log.setRetrievedItems(retrievedItemIds != null && !retrievedItemIds.isEmpty() ? 
                     String.join(",", retrievedItemIds) : "");
             log.setCreatedAt(LocalDateTime.now());
             retrievalLogRepository.save(log);
             
-            logger.debug("记录知识检索统计: conversationId={}, messageId={}, query={}, retrievedCount={}", 
-                    conversationId, messageId, query, 
+            logger.debug("记录知识检索统计: conversationId={}, messageId={}, query={}, riskType={}, retrievedCount={}", 
+                    conversationId, messageId, query, riskType,
                     retrievedItemIds != null ? retrievedItemIds.size() : 0);
         } catch (Exception e) {
             logger.warn("记录知识检索统计失败: {}", e.getMessage());
@@ -85,8 +89,15 @@ public class KnowledgeService {
     /**
      * 记录知识检索统计（简单版本）
      */
+    public void recordKnowledgeRetrieval(String query, List<String> retrievedItemIds) {
+        recordKnowledgeRetrieval(query, null, retrievedItemIds);
+    }
+
+    /**
+     * 记录知识检索统计（兼容版本）
+     */
     public void recordKnowledgeRetrieval(String query, boolean success) {
-        recordKnowledgeRetrieval(query, success ? java.util.Collections.singletonList("retrieved") : java.util.Collections.emptyList());
+        recordKnowledgeRetrieval(query, null, success ? java.util.Collections.singletonList("retrieved") : java.util.Collections.emptyList());
     }
 
     /**
