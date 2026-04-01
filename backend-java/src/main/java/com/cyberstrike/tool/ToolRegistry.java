@@ -3,7 +3,11 @@ package com.cyberstrike.tool;
 import com.cyberstrike.entity.McpServer;
 import com.cyberstrike.mcp.McpExecutor;
 import com.cyberstrike.repository.McpServerRepository;
+import com.cyberstrike.service.KnowledgeService;
+import com.cyberstrike.service.PythonVenvService;
 import com.cyberstrike.service.SkillsStatsService;
+import com.cyberstrike.service.WebshellService;
+import com.cyberstrike.skills.SkillsManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,19 +40,21 @@ public class ToolRegistry {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final YamlToolLoader yamlToolLoader;
     private final com.cyberstrike.service.KnowledgeService knowledgeService;
+    private final com.cyberstrike.service.WebshellService webshellService;
     private final com.cyberstrike.service.PythonVenvService pythonVenvService;
     private final McpServerRepository mcpServerRepository;
     private final com.cyberstrike.skills.SkillsManager skillsManager;
     private final SkillsStatsService skillsStatsService;
 
     public ToolRegistry(YamlToolLoader yamlToolLoader,
-            com.cyberstrike.service.KnowledgeService knowledgeService,
-            com.cyberstrike.service.PythonVenvService pythonVenvService,
+                        KnowledgeService knowledgeService,
+                        WebshellService webshellService, PythonVenvService pythonVenvService,
                         McpServerRepository mcpServerRepository,
-            com.cyberstrike.skills.SkillsManager skillsManager,
-            SkillsStatsService skillsStatsService) {
+                        SkillsManager skillsManager,
+                        SkillsStatsService skillsStatsService) {
         this.yamlToolLoader = yamlToolLoader;
         this.knowledgeService = knowledgeService;
+        this.webshellService = webshellService;
         this.pythonVenvService = pythonVenvService;
         this.mcpServerRepository = mcpServerRepository;
         this.skillsManager = skillsManager;
@@ -334,6 +340,11 @@ public class ToolRegistry {
             registerKnowledgeTools();
         }
 
+        // ==================================================================
+        // WebShell 工具注册
+        // ==================================================================
+        registerWebShellTools();
+
     }
 
     /**
@@ -370,16 +381,19 @@ public class ToolRegistry {
                 "Knowledge");  // 设置 toolType 为 Knowledge
 
         // 工具2: 搜索知识库
-        registerBuiltinTool("search_knowledge_base", "在知识库中搜索相关的安全知识。当你需要了解特定漏洞类型、攻击技术、检测方法等安全知识时，可以使用此工具进行检索。工具使用向量检索和混合搜索技术，能够根据查询内容的语义相似度和关键词匹配，自动找到最相关的知识片段。建议：在搜索前可以先调用 list_knowledge_risk_types 工具获取可用的风险类型，然后使用正确的 risk_type 参数进行精确搜索，这样可以大幅减少检索时间。",
+        registerBuiltinTool("search_knowledge_base",
+                "【重要】在知识库中搜索相关的安全知识。使用此工具前，必须先调用 list_knowledge_risk_types 获取可用的风险类型列表，然后使用正确的 risk_type 参数进行精确搜索。",
                 """
                 {"type":"object", "properties":{
                     "query":{"type":"string", "description":"搜索查询内容，描述你想要了解的安全知识主题"},
-                    "risk_type":{"type":"string", "description":"可选：指定风险类型（如：SQL注入、XSS、文件上传等）。建议先调用 list_knowledge_risk_types 工具获取可用的风险类型列表，然后使用正确的风险类型进行精确搜索，这样可以大幅减少检索时间。如果不指定则搜索所有类型。"}
-                }, "required":["query"]}
+                    "risk_type":{"type":"string", "description":"【必填】风险类型，必须从 list_knowledge_risk_types 工具返回的列表中选择，例如：SQL注入、XSS、文件上传等"}
+                }, "required":["query", "risk_type"]}
                 """,
                 (args) -> {
                     String query = args.has("query") ? args.get("query").asText() : "";
-                    String riskType = args.has("risk_type") ? args.get("risk_type").asText() : "";
+                    String riskType = args.has("risk_type") && !args.get("risk_type").isNull() ? args.get("risk_type").asText() : null;
+                    
+                    log.info("知识库检索参数: query={}, riskType={}", query, riskType);
 
                     if (query == null || query.isEmpty()) {
                         return "错误: 查询参数不能为空";
@@ -394,7 +408,7 @@ public class ToolRegistry {
 
                         if (results.isEmpty()) {
                             // 记录知识检索统计（无结果）
-                            knowledgeService.recordKnowledgeRetrieval(query, new java.util.ArrayList<>());
+                            knowledgeService.recordKnowledgeRetrieval(query, riskType, new java.util.ArrayList<>());
                             return String.format("未找到与查询 '%s' 相关的知识。建议：\n1. 尝试使用不同的关键词\n2. 检查风险类型是否正确\n3. 确认知识库中是否包含相关内容", query);
                         }
 
@@ -409,7 +423,7 @@ public class ToolRegistry {
                         List<String> retrievedItemIds = new ArrayList<>(resultsByItem.keySet());
 
                         // 记录知识检索统计（类似 skill 模块的记录方式）
-                        knowledgeService.recordKnowledgeRetrieval(query, retrievedItemIds);
+                        knowledgeService.recordKnowledgeRetrieval(query, riskType, retrievedItemIds);
 
                         // 按最高混合分数排序文档组
                         List<Map.Entry<String, List<com.cyberstrike.service.KnowledgeRetriever.RetrievalResult>>> sortedGroups =
@@ -472,13 +486,228 @@ public class ToolRegistry {
                     } catch (Exception e) {
                         log.error("知识库检索失败", e);
                         // 记录检索失败
-                        knowledgeService.recordKnowledgeRetrieval(query, false);
+                        knowledgeService.recordKnowledgeRetrieval(query, riskType, new java.util.ArrayList<>());
                         return "检索失败: " + e.getMessage();
                     }
                 },
                 "Knowledge");  // 设置 toolType 为 Knowledge
     }
 
+    /**
+     * 注册 WebShell 工具 - 用于远程命令执行和文件操作
+     */
+
+    /**
+     * 注册 WebShell 工具 - 用于远程命令执行和文件操作
+     */
+    private void registerWebShellTools() {
+        if (webshellService == null) {
+            log.warn("WebshellService 未注入，跳过注册 WebShell 工具");
+            return;
+        }
+
+        // 工具1: 执行 shell 命令
+        registerBuiltinTool("execute_shell_command",
+                "在目标服务器上执行 shell 命令。支持 Linux/Unix 命令如 ls、cat、ps、grep、find、whoami、ifconfig、netstat 等。",
+                """
+                {
+                    "type": "object",
+                    "properties": {
+                        "command": {
+                            "type": "string",
+                            "description": "要执行的 shell 命令，例如：ls -la /home、ps aux | grep nginx、cat /etc/passwd、whoami"
+                        }
+                    },
+                    "required": ["command"]
+                }
+                """,
+                (args) -> {
+                    String command = args.get("command").asText();
+                    String connId = ToolContext.getWebShellConnectionId();
+
+                    if (connId == null || connId.isEmpty()) {
+                        return "错误：未找到 WebShell 连接 ID。请先选择一个目标服务器连接。";
+                    }
+
+                    return executeWebShellCommand(connId, command);
+                },
+                "WebShell");
+
+        // 工具2: 列出目录
+        registerBuiltinTool("list_directory",
+                "列出目标服务器指定目录的文件和子目录。",
+                """
+                {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "要列出的目录路径，默认为当前目录。例如：/home、/var/log、/etc/nginx"
+                        }
+                    },
+                    "required": []
+                }
+                """,
+                (args) -> {
+                    String path = args.has("path") ? args.get("path").asText() : ".";
+                    String connId = ToolContext.getWebShellConnectionId();
+
+                    if (connId == null || connId.isEmpty()) {
+                        return "错误：未找到 WebShell 连接 ID。请先选择一个目标服务器连接。";
+                    }
+
+                    // 根据操作系统自动选择命令
+                    String command = "ls -la " + path;
+                    return executeWebShellCommand(connId, command);
+                },
+                "WebShell");
+
+        // 工具3: 读取文件
+        registerBuiltinTool("read_file",
+                "读取服务器上的文件内容。支持文本文件如 .txt、.log、.conf、.xml、.json、.py、.sh、.php 等。",
+                """
+                {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {
+                            "type": "string",
+                            "description": "要读取的文件完整路径，例如：/etc/passwd、/var/log/nginx/access.log、/home/user/app.py"
+                        }
+                    },
+                    "required": ["file_path"]
+                }
+                """,
+                (args) -> {
+                    String filePath = args.get("file_path").asText();
+                    String connId = ToolContext.getWebShellConnectionId();
+
+                    if (connId == null || connId.isEmpty()) {
+                        return "错误：未找到 WebShell 连接 ID。请先选择一个目标服务器连接。";
+                    }
+
+                    String command = "cat " + filePath;
+                    return executeWebShellCommand(connId, command);
+                },
+                "WebShell");
+
+        // 工具4: 写入文件
+        registerBuiltinTool("write_file",
+                "向服务器写入文件内容。可用于创建新文件或覆盖现有文件。",
+                """
+                {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {
+                            "type": "string",
+                            "description": "要写入的文件完整路径"
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "要写入的文件内容"
+                        }
+                    },
+                    "required": ["file_path", "content"]
+                }
+                """,
+                (args) -> {
+                    String filePath = args.get("file_path").asText();
+                    String content = args.get("content").asText();
+                    String connId = ToolContext.getWebShellConnectionId();
+
+                    if (connId == null || connId.isEmpty()) {
+                        return "错误：未找到 WebShell 连接 ID。请先选择一个目标服务器连接。";
+                    }
+
+                    // 使用 cat 配合 heredoc 或 echo 写入
+                    // 注意：这里简化处理，实际可能需要处理特殊字符转义
+                    String escapedContent = content.replace("'", "'\\''");
+                    String command = String.format("printf '%%s' '%s' > %s", escapedContent, filePath);
+                    return executeWebShellCommand(connId, command);
+                },
+                "WebShell");
+
+        // 工具5: 获取系统信息
+        registerBuiltinTool("get_system_info",
+                "获取目标服务器的系统信息，包括操作系统、主机名、当前用户、IP地址等。",
+                """
+                {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+                """,
+                (args) -> {
+                    String connId = ToolContext.getWebShellConnectionId();
+
+                    if (connId == null || connId.isEmpty()) {
+                        return "错误：未找到 WebShell 连接 ID。请先选择一个目标服务器连接。";
+                    }
+
+                    StringBuilder info = new StringBuilder();
+                    info.append("=== 系统信息 ===\n\n");
+
+                    // 获取操作系统类型
+                    String osInfo = executeWebShellCommand(connId, "uname -a 2>/dev/null || ver");
+                    info.append("系统: ").append(osInfo.trim()).append("\n");
+
+                    // 获取主机名
+                    String hostname = executeWebShellCommand(connId, "hostname 2>/dev/null || echo %COMPUTERNAME%");
+                    info.append("主机名: ").append(hostname.trim()).append("\n");
+
+                    // 获取当前用户
+                    String whoami = executeWebShellCommand(connId, "whoami 2>/dev/null || echo %USERNAME%");
+                    info.append("当前用户: ").append(whoami.trim()).append("\n");
+
+                    // 获取 IP 地址
+                    String ip = executeWebShellCommand(connId, "ip addr show 2>/dev/null | grep 'inet ' | grep -v 127.0.0.1 | head -1 || ipconfig | findstr IPv4");
+                    info.append("IP 地址: ").append(ip.trim()).append("\n");
+
+                    // 获取当前工作目录
+                    String pwd = executeWebShellCommand(connId, "pwd 2>/dev/null || cd");
+                    info.append("当前目录: ").append(pwd.trim());
+
+                    return info.toString();
+                },
+                "WebShell");
+
+        log.info("WebShell 工具注册成功");
+    }
+
+    /**
+     * 执行 WebShell 命令的内部方法
+     */
+    private String executeWebShellCommand(String connectionId, String command) {
+        try {
+            log.info("执行 WebShell 命令: connectionId={}, command={}", connectionId, command);
+
+            com.cyberstrike.dto.WebshellExecResponse response =
+                    webshellService.execWithConnection(connectionId, command);
+
+            if (response == null) {
+                return "错误：执行命令失败，返回为空。";
+            }
+
+            if (!response.isOk()) {
+                return String.format("命令执行失败: %s", response.getError());
+            }
+
+            String output = response.getOutput();
+            if (output == null || output.trim().isEmpty()) {
+                return "命令执行成功，但无输出内容。";
+            }
+
+            // 限制输出长度，避免返回过多内容导致 token 超限
+            if (output.length() > 10000) {
+                output = output.substring(0, 10000) + "\n... [输出内容过长，已截断，共 " + output.length() + " 字符]";
+            }
+
+            return output;
+
+        } catch (Exception e) {
+            log.error("执行 WebShell 命令异常: connectionId={}, command={}", connectionId, command, e);
+            return String.format("执行命令异常: %s", e.getMessage());
+        }
+    }
     /**
      * 获取所有工具定义（合并内置和 YAML(已启用)）
      */
