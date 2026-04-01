@@ -30,8 +30,12 @@ const modeToType = (mode: string) => {
   return c;
 }
 
-export const parseWebshellListItems = (rawOutput: string) => {
-  const lines = (rawOutput || '').split(/\n/).filter((l: string) => { return l.trim(); }).slice(3);
+export const parseReponse = (rawOutput: string) => {
+  const lines = (rawOutput || '').split(/\n/).filter((l: string) => { return l.trim(); }).slice(2);
+  return lines.join('\n');
+}
+
+export const parseWebshellListItems = (lines: string[]) => {
   const items = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];

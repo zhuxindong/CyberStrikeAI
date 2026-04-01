@@ -9,23 +9,26 @@
           <el-input v-model.trim="filterKey" />
         </el-form-item>
         <el-form-item>
-          <el-button @click="handCommand('file-refresh')">列出目录</el-button>
+          <el-button @click="getFileList()">列出目录</el-button>
         </el-form-item>
       </el-form>
     </div>
     <div>
-      <el-button v-for="command in commands" text type="primary" size="small" @click="handCommand(command.value)">
+      <el-button v-for="command in commands" text type="primary" size="small" @click="handleCommand(command.value)">
         {{ command.label }}
       </el-button>
     </div>
   </div>
   <div class="webshell-file-list" v-loading="loading">
-    <!-- <el-breadcrumb separator="/">
-      <el-breadcrumb-item v-for="{ path, name } in filePaths" @click="switchFolder(path)">
-        <el-link>{{ name }}</el-link>
+    <el-breadcrumb separator="/">
+      <el-breadcrumb-item v-for="({ path, name }, i) in filePaths">
+        <template v-if="i === filePaths.length - 1">
+          {{ name }}
+        </template>
+        <el-link v-else @click="switchFolder(path)">{{ name }}</el-link>
       </el-breadcrumb-item>
-    </el-breadcrumb> -->
-    <el-table ref="table" :data="filteredFileList">
+    </el-breadcrumb>
+    <el-table ref="table" max-height="380" :data="filteredFileList">
       <el-table-column type="selection" />
       <el-table-column label="文件名" min-width="200px">
         <template v-slot="{ row }">
@@ -41,26 +44,35 @@
       <el-table-column label="操作" min-width="400px">
         <template v-slot="{ row }">
           <template v-if="!row.isDir">
-            <el-button text type="primary" size="small">读取</el-button>
-            <el-button text type="primary" size="small">下载</el-button>
-            <el-button text type="primary" size="small">编辑</el-button>
-            <el-button text type="primary" size="small" @click="handCommand('rename')">重命名</el-button>
-            <el-button text type="danger" size="small" @click="handCommand('delete', row.name)">删除</el-button>
+            <el-button text type="primary" size="small" @click="handleCommand('read', row.name)">读取</el-button>
+            <el-button text type="primary" size="small" @click="handleCommand('download', row.name)">下载</el-button>
+            <el-button text type="primary" size="small" @click="showEdit(row.name)">编辑</el-button>
+            <el-button text type="primary" size="small" @click="handleCommand('rename', row.name)">重命名</el-button>
+            <el-button text type="danger" size="small" @click="handleCommand('delete', row.name)">删除</el-button>
           </template>
           <template v-else>
-            <el-button text type="primary" size="small">重命名</el-button>
+            <el-button text type="primary" size="small" @click="handleCommand('rename', row.name)">重命名</el-button>
           </template>
         </template>
       </el-table-column>
     </el-table>
   </div>
+  <el-dialog v-model="dialogVisible" :title="editFileName ? '编辑内容' : '查看内容'">
+    <pre v-if="!editFileName" class="file-content">
+      {{ fileContent }}
+    </pre>
+    <el-input v-else type="textarea" :rows="15" v-model="fileContent" />
+    <template v-if="editFileName" #footer>
+      <el-button type="primary" @click="handleCommand('edit')">确定</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script lang="ts" setup>
 import { computed, ref, useTemplateRef } from 'vue';
 import { Connection } from './Index.vue';
-import { ElMessage, ElMessageBox, TableInstance } from 'element-plus';
-import { parseWebshellListItems } from "./Utils";
+import { ElInput, ElMessage, ElMessageBox, TableInstance } from 'element-plus';
+import { parseReponse, parseWebshellListItems } from "./Parser";
 
 interface File {
   name: string;
@@ -75,7 +87,7 @@ interface File {
 const { connection } = defineProps<{
   connection: Connection
 }>();
-const currentPath = ref('.');
+const currentPath = ref('');
 const filterKey = ref('');
 const commands = ref<Record<string, string>[]>([
   {
@@ -110,53 +122,53 @@ const commands = ref<Record<string, string>[]>([
 const loading = ref(false);
 const fileList = ref<File[]>([]);
 
+const dialogVisible = ref(false);
+const fileContent = ref('');
+const editFileName = ref('');
+
 const filteredFileList = computed(() => {
   return fileList.value.filter(f => f.name.includes(filterKey.value));
 });
 const filePaths = computed(() => {
   const paths: any = [];
   let trace = '';
-  currentPath.value.split(/[\/|\.\/]/).forEach(p => {
-    trace += p;
+  currentPath.value.split(/\//).filter(name => !!name).forEach(name => {
     paths.push({
-      name: p,
-      path: trace + '/' + p
+      name: name,
+      path: `${trace}/${name}`
     });
+    trace += name;
   });
   return paths;
 });
 
 const table = useTemplateRef<TableInstance>('table');
-const handCommand = async (command: string, fileName: string = '') => {
+
+const handleCommand = async (command: string, fileName: string = '') => {
   try {
     if (command === 'parent-dir') {
-      let pathInput = '';
-      const p = currentPath.value || './';
-      if (p === '.' || p === '/') {
-        pathInput = '..';
-      } else {
-        pathInput = p.replace(/\/[^/]+$/, '') || './';
-      }
-      getFileList(pathInput);
-    } else if (command === 'file-refresh') {
-      getFileList(currentPath.value);
+      const p = currentPath.value;
+      currentPath.value = p.replace(/\/?[^/]+$/, '') || '';
+      getFileList();
     } else if (command === 'mkdir') {
-      const messageData: any = await ElMessageBox.prompt('请输入文件名');
+      const messageData: any = await ElMessageBox.prompt('请输入目录名', '新建目录');
       if (messageData.action === 'confirm') {
         const path = `${currentPath.value}/${messageData.value}`;
-        invokeFileop({
+        await invokeFileop({
           action: 'mkdir',
           path
         });
+        getFileList();
       }
     } else if (command === 'newfile') {
-      const messageData: any = await ElMessageBox.prompt('请输入文件名');
+      const messageData: any = await ElMessageBox.prompt('请输入文件名', '新建目录');
       if (messageData.action === 'confirm') {
         const path = `${currentPath.value}/${messageData.value}`;
-        invokeFileop({
+        await invokeFileop({
           action: 'write',
           path
         });
+        getFileList();
       }
     } else if (command === 'upload') {
       const input = document.createElement('input');
@@ -182,18 +194,22 @@ const handCommand = async (command: string, fileName: string = '') => {
           const sendNext = () => {
             invokeFileop({
               action: 'upload_chunk',
-              path: currentPath.value,
+              path: `${currentPath.value}/${file.name}`,
               content: base64Chunks[idx],
               chunk_index: idx
             }).then(() => {
-              if (idx < base64Chunks.length) {
+              if (idx < base64Chunks.length - 1) {
                 idx++;
                 sendNext();
+              } else {
+                getFileList();
               }
             }).catch(() => {
-              if (idx < base64Chunks.length) {
+              if (idx < base64Chunks.length - 1) {
                 idx++;
                 sendNext();
+              } else {
+                getFileList();
               }
             });
           };
@@ -202,57 +218,113 @@ const handCommand = async (command: string, fileName: string = '') => {
       };
       input.remove();
     } else if (command === 'batch-delete') {
-      const messageData: any = await ElMessageBox.confirm('确定删除文件吗?', '删除', {
+      const selected = table.value?.getSelectionRows() as File[];
+      if (selected?.length === 0) {
+        ElMessage.info('尚未选择文件');
+        return;
+      }
+      const messageData = await ElMessageBox.confirm('确定删除文件吗?', '删除', {
         type: 'warning'
       });
-      if (messageData.action === 'confirm') {
-        const selected = table.value?.getSelectionRows();
-        selected?.forEach((row: File) => {
-          invokeFileop({
+      if (messageData === 'confirm') {
+        for (let index = 0; index < selected.length; index++) {
+          const row = selected[index];
+          await invokeFileop({
             action: 'delete',
             path: `${currentPath.value}/${row.name}`
           });
-        });
+        }
+        getFileList();
+        ElMessage.success('删除成功');
       }
     } else if (command === 'batch-download') {
-      const selected = table.value?.getSelectionRows();
-      selected?.forEach((row: File) => {
-        invokeFileop({
+      const selected = table.value?.getSelectionRows() as File[];
+      if (selected?.length === 0) {
+        ElMessage.info('尚未选择文件');
+        return;
+      }
+      for (let index = 0; index < selected.length; index++) {
+        const row = selected[index];
+        const output = await invokeFileop({
           action: 'read',
           path: `${currentPath.value}/${row.name}`
-        }).then(output => {
-          const blob = new Blob([output], { type: 'application/octet-stream' });
-          const link = document.createElement('a');
-          link.download = row.name;
-          const href = URL.createObjectURL(blob)
-          link.href = href;
-          link.click();
-          link.remove();
-          URL.revokeObjectURL(href);
         });
-      });
-    } else if (command === 'rename') {
-      const messageData: any = await ElMessageBox.prompt('请输入文件名');
-      if (messageData.action === 'confirm') {
-        invokeFileop({
-          action: 'write',
-          path: currentPath.value + '/' + messageData.value
-        }).then(() => {
-
-        });
+        const blob = new Blob([output], { type: 'application/octet-stream' });
+        const link = document.createElement('a');
+        link.download = row.name;
+        const href = URL.createObjectURL(blob)
+        link.href = href;
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(href);
       }
-    } else if (command === 'delete') {
-      invokeFileop({
-        action: 'delete',
+    } else if (command === 'read') {
+      const output = await invokeFileop({
+        action: 'read',
         path: `${currentPath.value}/${fileName}`
       });
+      editFileName.value = '';
+      fileContent.value = output;
+      dialogVisible.value = true;
+    } else if (command === 'download') {
+      const output = await invokeFileop({
+        action: 'read',
+        path: `${currentPath.value}/${fileName}`
+      });
+      const blob = new Blob([output], { type: 'application/octet-stream' });
+      const link = document.createElement('a');
+      link.download = fileName;
+      const href = URL.createObjectURL(blob);
+      link.href = href;
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(href);
+    } else if (command === 'edit') {
+      await invokeFileop({
+        action: 'write',
+        path: `${currentPath.value}/${editFileName.value}`,
+        content: fileContent.value
+      });
+      ElMessage.success('修改成功');
+      dialogVisible.value = false;
+      getFileList();
+    } else if (command === 'rename') {
+      const messageData: any = await ElMessageBox.prompt('请输入文件名', {
+        inputValue: fileName
+      });
+      if (messageData.action === 'confirm') {
+        await invokeFileop({
+          action: 'rename',
+          path: currentPath.value + '/' + fileName,
+          targetPath: currentPath.value + '/' + messageData.value,
+        });
+        getFileList();
+        ElMessage.success('重命名成功');
+      }
+    } else if (command === 'delete') {
+      const messageData = await ElMessageBox.confirm('确定删除文件吗?', '删除', {
+        type: 'warning'
+      });
+      if (messageData === 'confirm') {
+        await invokeFileop({
+          action: 'delete',
+          path: `${currentPath.value}/${fileName}`
+        });
+        ElMessage.success('删除成功');
+        getFileList();
+      }
     }
-  } catch (err) {
-    console.log(err)
+  } catch (err: any) {
+    if (err.message) {
+      ElMessage.error(err.message);
+    }
   }
 };
 
 const invokeFileop: (config: any) => Promise<string> = async (config: any) => {
+  if (config.path) {
+    config.path = config.path.replace(/^\//, '');
+  }
   const res = await fetch('/api/webshell/fileop', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -263,14 +335,28 @@ const invokeFileop: (config: any) => Promise<string> = async (config: any) => {
   });
   if (res.ok) {
     const data = await res.json();
-    return data.output;
+    if (!data.ok) {
+      throw new Error(data.error);
+    }
+    return parseReponse(data.output);
   } else {
-    ElMessage.error('文件操作失败');
+    throw new Error('文件操作失败');
   }
 };
 
+const showEdit = async (fileName: string) => {
+  dialogVisible.value = true;
+  const output = await invokeFileop({
+    action: 'read',
+    path: `${currentPath.value}/${fileName}`
+  });
+  fileContent.value = output;
+  editFileName.value = fileName;
+}
+
 const switchFolder = (path: string) => {
-  path = path.replace(/\/\//, '/');
+  path = path.replace(/^\//, '');
+  path = path.replace(/\/\//g, '/');
   currentPath.value = path;
   getFileList(path);
 };
@@ -278,15 +364,14 @@ const switchFolder = (path: string) => {
 const getFileList = async (path?: string) => {
   loading.value = true;
   try {
-    path = path || '.';
+    path = path || currentPath.value || '';
     const out: string = await invokeFileop({
       action: 'list',
       path
     });
-    const items = parseWebshellListItems(out);
+    const items = parseWebshellListItems(out.split('\n').slice(1));
     console.log(items);
     fileList.value = items;
-  } catch (error) {
   } finally {
     loading.value = false;
   }
@@ -298,5 +383,9 @@ const getFileList = async (path?: string) => {
   >.el-breadcrumb {
     margin: 8px;
   }
+}
+
+.file-content {
+  white-space: pre-line;
 }
 </style>

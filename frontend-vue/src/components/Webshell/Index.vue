@@ -13,7 +13,7 @@
         </el-button>
       </div>
       <div class="webshell-list">
-        <div v-for="conn in connections" :class="{ 'active': conn.id === activeConnection?.id }"
+        <div v-for="conn in connections" :class="{ 'active': conn === activeConnection }"
           @click="selectConn(conn)">
           <div class="webshell-item-remark">{{ conn.remark }}</div>
           <div class="webshell-item-url">{{ conn.url }}</div>
@@ -29,13 +29,16 @@
         <el-tabs v-model="activeTabName">
           <el-tab-pane label="虚拟终端" name="virtualTerminal" />
           <el-tab-pane label="文件管理" name="fileManager" />
-          <el-tab-pane label="AI 助手" name="AIAssistant" />
+          <el-tab-pane label="AI助手" name="AIAssistant" />
         </el-tabs>
         <div v-show="activeTabName === 'virtualTerminal'" class="webshell-pane">
           <virtual-terminal :connection="activeConnection" />
         </div>
         <div v-show="activeTabName === 'fileManager'" class="webshell-pane">
           <file-manager :connection="activeConnection" />
+        </div>
+        <div v-show="activeTabName === 'AIAssistant'" class="webshell-pane AI-assistant">
+          <AI-assistant :connection="activeConnection" />
         </div>
       </div>
     </div>
@@ -83,6 +86,7 @@ import "@xterm/xterm/css/xterm.css";
 import { nextTick, onMounted, ref, useTemplateRef } from "vue";
 import VirtualTerminal from "./VirtualTerminal.vue";
 import FileManager from "./FileManager.vue";
+import AIAssistant from "./AIAssistant.vue";
 import { ElMessage, ElMessageBox, FormContext, FormRules } from "element-plus";
 
 export interface Connection {
@@ -350,18 +354,19 @@ const confirm = async () => {
       min-width: 0;
 
       .webshell-pane {
-        flex: 1 1 0;
-        min-height: 0;
-        min-width: 0;
-        flex-direction: column;
-        overflow: auto;
-        width: 100%;
+        height: 100%;
+        overflow: hidden;
+
+        &.AI-assistant {
+          display: flex;
+        }
       }
 
       .webshell-terminal-toolbar {
         padding: 10px 14px;
         margin-bottom: 10px;
         border-radius: 10px;
+        background: var(--bg-secondary);
         border: 1px solid var(--border-color);
 
         .webshell-quick-label {

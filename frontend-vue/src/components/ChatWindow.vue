@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, onMounted, reactive, useTemplateRef } from 'vue';
-import { streamChat } from '../utils/chatService';
+import { ref, watch, onMounted, reactive, useTemplateRef } from 'vue';
+import { getTitleByType, streamChat, scrollToBottom } from '../utils/chatService';
 import { escapeHtml } from '../utils/escape';
 import MarkdownIt from 'markdown-it';
 import { dayjs, ElMessage } from 'element-plus';
@@ -17,7 +17,7 @@ import { useRoute } from 'vue-router';
 const md = new MarkdownIt();
 
 // 调用序列项
-interface TimelineItem {
+export interface TimelineItem {
   id?: string;
   type?: string;
   mcpExecutionIds?: string;
@@ -30,7 +30,7 @@ interface TimelineItem {
   resultStatus?: string;
 }
 
-interface Message {
+export interface Message {
   id?: string;
   role: 'user' | 'assistant' | 'system';
   content?: string;
@@ -62,8 +62,7 @@ const activeTasks = ref<ActiveTaskMessage[]>([]);
 const loading = ref(false);
 const currentTaskId = ref<string | undefined>(undefined);
 const progressTitle = ref<string>('');
-const messagesContainer = useTemplateRef<HTMLElement>('messagesContainer');
-const progressTimeline = useTemplateRef<HTMLElement[]>('progressTimeline');
+const messageContainer = useTemplateRef<HTMLElement>('messageContainer');
 
 const showAttackChain = ref(false);
 const mcpCallDialogVisible = ref<boolean>(false);
@@ -113,31 +112,6 @@ const fetchRoles = async () => {
   }
 };
 
-// 根据消息类型获取标题
-const getTitleByType = (type: string, params: any, content?: string) => {
-  let title = '';
-  if (type === 'tool_calls_detected' || type === 'progress') {
-    title = content || params.content || '';
-  } else if (type === 'tool_call') {
-    const toolName = params.mcpExecutionIds || params.toolName || '未知工具';
-    title = `🔧 调用工具: ${escapeHtml(toolName)}`
-  } else if (type === 'tool_result') {
-    const resultToolName = params.mcpExecutionIds || params.toolName || '未知工具';
-    const success = params.resultStatus === 'success';
-    const statusIcon = success ? '✅' : '❌';
-    title = `${statusIcon} 工具 ${escapeHtml(resultToolName)} 执行${success ? '完成' : '失败'}`
-  } else if (type === 'iteration') {
-    title = `正在进行第${params.iteration}轮迭代`;
-  } else if (type === 'cancelled') {
-    title = '⛔ 任务已取消';
-  } else if (type === 'thinking') {
-    title = '🤔 AI思考';
-  } else if (type === 'error') {
-    title = '❌ 错误';
-  }
-  return title;
-};
-
 // 加载对话历史消息
 const loadConversationHistory = async (conversationId: string) => {
   loading.value = true;
@@ -145,10 +119,10 @@ const loadConversationHistory = async (conversationId: string) => {
     const response = await fetch(`/api/conversations/${conversationId}`);
     if (response.ok) {
       const data = await response.json();
-      const results = data.messages;
-      if (results && Array.isArray(results)) {
+      const rawMessages = data.messages;
+      if (rawMessages && Array.isArray(rawMessages)) {
         messages.splice(0);
-        results.forEach((msg: any) => {
+        rawMessages.forEach((msg: any) => {
           const item: Message = {
             id: msg.id,
             role: msg.role,
@@ -167,7 +141,7 @@ const loadConversationHistory = async (conversationId: string) => {
           }
           messages.push(item);
         });
-        await scrollToBottom();
+        scroll();
       }
     } else if (response.status === 404) {
       ElMessage.error('对话不存在');
@@ -230,15 +204,8 @@ onMounted(() => {
   fetchRoles();
 });
 
-const scrollToBottom = async () => {
-  await nextTick();
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-  }
-  if (progressTimeline.value?.length) {
-    const lastItem = progressTimeline.value[progressTimeline.value.length - 1];
-    lastItem.scrollTop = lastItem.scrollHeight;
-  }
+const scroll = () => {
+  scrollToBottom(messageContainer.value);
 };
 
 // 生成调用工具信息
@@ -272,7 +239,7 @@ const sendMessage = async () => {
     timelineItems: []
   });
 
-  await scrollToBottom();
+  scroll();
 
   let streamingConversatinoId: string | undefined = currentConversationId.value;
   // Initial assistant placeholder tracking
@@ -345,7 +312,7 @@ const sendMessage = async () => {
         });
         progressTitle.value = '❌ 执行失败';
       }
-      scrollToBottom();
+      scroll();
     },
     onCancel: () => {
       stopLoadActiveTasks();
@@ -361,7 +328,7 @@ const sendMessage = async () => {
       loading.value = false;
       currentTaskId.value = undefined;
       progressTitle.value = '⛔ 任务已取消';
-      scrollToBottom();
+      scroll();
     },
     onError: () => {
       stopLoadActiveTasks();
@@ -373,7 +340,7 @@ const sendMessage = async () => {
       lastMessage.content = timelineItems[timelineItems.length - 1]?.content;
       loading.value = false;
       progressTitle.value = '❌ 执行失败';
-      scrollToBottom();
+      scroll();
     },
     onDone: () => {
       stopLoadActiveTasks();
@@ -389,7 +356,7 @@ const sendMessage = async () => {
       loading.value = false;
       currentTaskId.value = undefined;
       progressTitle.value = '✅ 渗透测试完成';
-      scrollToBottom();
+      scroll();
     }
   }, currentConversationId.value, selectedRole.value?.name);
 };
@@ -417,6 +384,7 @@ const stopTask = async (taskId?: string) => {
 // 展开/收起调用序列
 const toggleTimeline = (message: Message) => {
   message.expanded = !message.expanded;
+  scroll();
 };
 
 const showMcpCall = (messageId: string | undefined, id: string) => {
@@ -472,7 +440,7 @@ const renderMarkdown = (text: string | undefined) => {
         </div>
       </el-scrollbar>
     </div>
-    <div class="messages-area" ref="messagesContainer">
+    <div class="messages-area" ref="messageContainer">
       <div v-if="!currentConversationId" class="empty-state">
         <el-icon :size="64" class="icon"><Monitor /></el-icon>
         <h3>CyberStrike AI Ready</h3>
@@ -508,7 +476,7 @@ const renderMarkdown = (text: string | undefined) => {
               </div>
             </div>
             <!-- 调用序列 -->
-            <div ref="progressTimeline" v-show="msg.timelineItems?.length" :class="['progress-timeline', { 'expanded': msg.expanded }]">
+            <div v-show="msg.timelineItems?.length" :class="['progress-timeline', { 'expanded': msg.expanded }]">
               <div v-for="({ id, createdAt, title, type, content, args }) in msg.timelineItems"
                 :key="id"
                 :class="['timeline-item', `timeline-item-${type}`]">

@@ -119,6 +119,7 @@ const execWebshellCommand = async (command: string) => {
     }
   }
 }
+
 const initTerm = () => {
   if (termRef.value && !termInstace.value) {
     const term = new Terminal({
