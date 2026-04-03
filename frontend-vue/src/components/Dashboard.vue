@@ -41,7 +41,7 @@
           <h3 class="dashboard-section-title">运行概览</h3>
           <div class="dashboard-overview-list">
             <div @click="goPage('task')">
-              <el-icon>
+              <el-icon class="task">
                 <Menu />
               </el-icon>
               <div class="dashboard-overview-content">
@@ -62,7 +62,7 @@
               </div>
             </div>
             <div @click="goPage('mcp-monitor')">
-              <el-icon>
+              <el-icon class="tool">
                 <Phone />
               </el-icon>
               <div class="dashboard-overview-content">
@@ -83,7 +83,7 @@
               </div>
             </div>
             <div @click="goPage('knowledge-management')">
-              <el-icon>
+              <el-icon class="knowledge">
                 <Notebook />
               </el-icon>
               <div class="dashboard-overview-content">
@@ -104,7 +104,7 @@
               </div>
             </div>
             <div @click="goPage('skill-monitor')">
-              <el-icon>
+              <el-icon class="skills">
                 <Document />
               </el-icon>
               <div class="dashboard-overview-content">
@@ -624,6 +624,67 @@ const goPage = (path: string) => {
           border: 1px solid rgba(0, 0, 0, 0.05);
           cursor: pointer;
           transition: border-color 0.2s, background 0.2s, transform 0.2s;
+
+          &:hover {
+            transform: translateX(4px);
+          }
+
+          &:nth-child(1) {
+            &:hover {
+              border-color: rgba(245, 158, 11, 0.3);
+              background: linear-gradient(135deg, rgba(245, 158, 11, 0.06) 0%, rgba(245, 158, 11, 0.08) 100%);
+            }
+          }
+
+          &:nth-child(2) {
+            &:hover {
+              border-color: rgba(59, 130, 246, 0.3);
+              background: linear-gradient(135deg, rgba(59, 130, 246, 0.06) 0%, rgba(59, 130, 246, 0.08) 100%);
+            }
+          }
+
+          &:nth-child(3) {
+            &:hover {
+              border-color: rgba(139, 92, 246, 0.3);
+              background: linear-gradient(135deg, rgba(139, 92, 246, 0.06) 0%, rgba(139, 92, 246, 0.08) 100%);
+            }
+          }
+
+          &:nth-child(4) {
+            &:hover {
+              border-color: rgba(236, 72, 153, 0.3);
+              background: linear-gradient(135deg, rgba(236, 72, 153, 0.06) 0%, rgba(236, 72, 153, 0.08) 100%);
+            }
+          }
+        }
+
+        .el-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 28px;
+          height: 28px;
+          border-radius: 8px;
+
+          &.task {
+            background: rgba(245, 158, 11, 0.1);
+            color: #d97706;
+          }
+
+          &.tool {
+            background: rgba(59, 130, 246, 0.1);
+            color: #2563eb;
+          }
+
+          &.knowledge {
+            background: rgba(139, 92, 246, 0.1);
+            color: #7c3aed;
+          }
+
+          &.skills {
+            background: rgba(236, 72, 153, 0.1);
+            color: #db2777;
+          }
         }
 
         .dashboard-overview-content {

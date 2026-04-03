@@ -423,7 +423,7 @@ onMounted(() => {
           </div>
         </div>
       </div>
-     <el-pagination v-model:currentPage="pageNum" :page-size="pageSize"
+     <el-pagination v-model:currentPage="pageNum" :page-size="pageSize" hide-on-single-page
         layout="->, prev, pager, next, total" :total="total" background @change="loadVulnerabilities(false)" />
     </div>
 
