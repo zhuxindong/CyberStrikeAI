@@ -79,7 +79,7 @@
             </template>
           </el-table-column>
         </el-table>
-        <el-pagination layout="->, prev, pager, next, total" background :total="total"
+        <el-pagination layout="->, prev, pager, next, total" background hide-on-single-page :total="total"
           v-model:current-page="currentPage" @current-change="getTableData" />
       </div>
     </section>
@@ -281,7 +281,7 @@ const showDetail = (row: TableItem) => {
     parsedContent
   };
   console.log(mcpCallDetail.value);
-  
+
   dialogVisible.value = true;
 };
 

@@ -285,8 +285,7 @@ onMounted(() => {
       <div class="tools-controls">
         <el-button @click="toggleSelectAll(true)">全选</el-button>
         <el-button @click="toggleSelectAll(false)">全不选</el-button>
-        <el-input v-model="searchQuery" placeholder="搜索工具..." clearable
-          @keydown.enter="loadTools">
+        <el-input v-model="searchQuery" placeholder="搜索工具..." clearable @keydown.enter="loadTools">
           <template #append>
             <el-button @click="loadTools">🔍</el-button>
           </template>
@@ -316,9 +315,8 @@ onMounted(() => {
           </div>
           <el-empty v-if="tools.length === 0" description="未找到匹配的工具" />
         </el-scrollbar>
-        <el-pagination background layout="->, prev, pager, next, total" :total="total" :page-size="pageSize" 
-          :current-change="currentPage"
-          @current-change="onPageChange" />
+        <el-pagination background layout="->, prev, pager, next, total" hide-on-single-page :total="total"
+          :page-size="pageSize" :current-change="currentPage" @current-change="onPageChange" />
       </div>
     </div>
 
@@ -360,7 +358,8 @@ onMounted(() => {
                   <el-tag :type="getStatusType(server.status)">{{ getStatusName(server.status) }}</el-tag>
                 </div>
                 <div class="external-mcp-item-actions">
-                  <el-button v-if="server.status !== 'connected'" type="primary" @click="handleConnect(server)">启动</el-button>
+                  <el-button v-if="server.status !== 'connected'" type="primary"
+                    @click="handleConnect(server)">启动</el-button>
                   <el-button v-else type="danger" @click="handleDisconnect(server)">停止</el-button>
                   <el-button @click="handleEditServer(server)">编辑</el-button>
                   <el-button type="danger" @click="handleDeleteServer(server.id)">删除</el-button>
@@ -373,7 +372,7 @@ onMounted(() => {
                 </div>
                 <div v-if="server.toolCount > 0">
                   <span>工具数量</span>
-                  <span>🔧 {{server.toolCount}} 个工具</span>
+                  <span>🔧 {{ server.toolCount }} 个工具</span>
                 </div>
                 <div v-if="server.description">
                   <span>描述</span>
@@ -403,7 +402,8 @@ onMounted(() => {
       </div>
     </div>
 
-    <MCPDialog v-model:visible="dialogVisible" :is-edit="isEdit" :server-info="currentServer" @loadServers="loadServers" />
+    <MCPDialog v-model:visible="dialogVisible" :is-edit="isEdit" :server-info="currentServer"
+      @loadServers="loadServers" />
   </div>
 </template>
 
