@@ -171,9 +171,9 @@ public class AgentService {
         conversation.setTaskId(taskId);
         // 在处理请求时设置 WebShell 连接 ID
         if (request.getWebshellConnectionId() != null && !request.getWebshellConnectionId().isEmpty()) {
-            ToolContext.setWebShellConnectionId(request.getWebshellConnectionId());
+            //ToolContext.setWebShellConnectionId(request.getWebshellConnectionId());
             conversation.setWebshellConnectionId(request.getWebshellConnectionId());
-            log.info("设置 WebShell 连接 ID: {}", request.getWebshellConnectionId());
+            //log.info("设置 WebShell 连接 ID: {}", request.getWebshellConnectionId());
         }
         conversationRepository.save(conversation);
         task.status = "running";
@@ -186,7 +186,10 @@ public class AgentService {
         AtomicReference<String> resultId= new AtomicReference<>("");
         executor.submit(() -> {
             try {
-
+                if (request.getWebshellConnectionId() != null && !request.getWebshellConnectionId().isEmpty()) {
+                    ToolContext.setWebShellConnectionId(request.getWebshellConnectionId());
+                    log.info("设置 WebShell 连接 ID: {}", request.getWebshellConnectionId());
+                }
                 // --- 1. 加载历史消息 (重建上下文) ---
                 // 从数据库查出该会话的所有历史记录
                 List<ChatCompletionMessageDO> historyDOs = chatCompletionMessageRepository
