@@ -18,7 +18,11 @@
   --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.15);
 }
 
-h1, h2, h3, h4, h5 {
+h1,
+h2,
+h3,
+h4,
+h5 {
   margin: 0;
 }
 
@@ -58,7 +62,35 @@ body {
   }
 }
 
-.actions {
-  display: flex;
-  flex-direction: row-reverse;
+.el-button {
+  padding: 7px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  background-color: var(--bg-tertiary);
+
+  &:hover {
+    transform: translateY(-1px);
+  }
+
+  &.el-button--primary {
+    background: var(--accent-color);
+    color: white;
+
+    &:hover {
+      background: var(--accent-hover);
+      box-shadow: var(--shadow-sm);
+    }
+  }
+}
+
+.el-input {
+  .el-input__wrapper {
+    &.is-focus {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
+    }
+  }
 }

@@ -123,6 +123,11 @@ onMounted(() => {
   padding: 20px;
   overflow: auto;
 
+  >.actions {
+    display: flex;
+    flex-direction: row-reverse;
+  }
+
   .monitor-section {
     background: var(--bg-primary);
     border: 1px solid var(--border-color);

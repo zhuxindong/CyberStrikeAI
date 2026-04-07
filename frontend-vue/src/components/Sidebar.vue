@@ -106,9 +106,9 @@ onUnmounted(() => {
 <template>
   <div class="sidebar">
     <div class="sidebar-header">
-      <button class="new-chat-btn" @click="createConversation">
+      <el-button class="new-chat-btn" type="primary" @click="createConversation">
         <el-icon><Plus /></el-icon> 新对话
-      </button>
+      </el-button>
     </div>
     
     <div class="sidebar-content">
@@ -193,18 +193,7 @@ onUnmounted(() => {
 .new-chat-btn {
   width: 100%;
   padding: 10px 16px;
-  background-color: var(--el-color-primary); /* Use primary color */
-  color: white;
-  border: none;
-  border-radius: 8px;
   font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
 }
 
 .new-chat-btn:hover {
