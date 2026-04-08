@@ -11,6 +11,9 @@ import com.cyberstrike.service.McpService;
 import com.cyberstrike.tool.ToolRegistry;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -32,6 +35,7 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/api/mcp")
+@Tag(name = "MCP", description = "外部 MCP 服务器管理与调用接口")
 public class McpController {
 
     private final McpServerRepository mcpServerRepository;
@@ -50,6 +54,7 @@ public class McpController {
     /**
      * 获取所有内置工具列表
      */
+    @Operation(summary = "获取内置工具列表", description = "GET /api/mcp/tools")
     @GetMapping("/tools")
     public ResponseEntity<?> getBuiltinTools() {
         List<Map<String, Object>> tools = toolRegistry.getTools().stream()
@@ -75,6 +80,7 @@ public class McpController {
     /**
      * 获取所有外部 MCP 服务器
      */
+    @Operation(summary = "列出外部 MCP 服务器", description = "GET /api/mcp/servers 会实时刷新状态")
     @GetMapping("/servers")
     public ResponseEntity<?> listServers() {
         List<McpServer> servers = mcpServerRepository.findAllByOrderByCreatedAtDesc();
@@ -92,8 +98,9 @@ public class McpController {
     /**
      * 获取单个 MCP 服务器
      */
+    @Operation(summary = "获取 MCP 服务器详情", description = "GET /api/mcp/servers/{id}")
     @GetMapping("/servers/{id}")
-    public ResponseEntity<?> getServer(@PathVariable String id) {
+    public ResponseEntity<?> getServer(@Parameter(description = "服务器ID") @PathVariable String id) {
         return mcpServerRepository.findById(id)
                 .map(server -> {
                     server.setStatus(mcpManager.getStatus(id));
@@ -106,6 +113,7 @@ public class McpController {
     /**
      * 创建 MCP 服务器
      */
+    @Operation(summary = "创建 MCP 服务器", description = "POST /api/mcp/servers 支持批量 JSON 配置")
     @PostMapping("/servers")
     @Transactional
     public ResponseEntity<?> createServer(@RequestBody Map<String, Map<String, Object>> jsonMap) {
@@ -204,8 +212,9 @@ public class McpController {
     /**
      * 更新 MCP 服务器
      */
+    @Operation(summary = "更新 MCP 服务器", description = "PUT /api/mcp/servers/{id}")
     @PutMapping("/servers/{id}")
-    public ResponseEntity<?> updateServer(@PathVariable String id, @RequestBody McpServer body) {
+    public ResponseEntity<?> updateServer(@Parameter(description = "服务器ID") @PathVariable String id, @RequestBody McpServer body) {
         return mcpServerRepository.findById(id)
                 .map(server -> {
                     if (body.getName() != null)
@@ -230,8 +239,9 @@ public class McpController {
     /**
      * 删除 MCP 服务器
      */
+    @Operation(summary = "删除 MCP 服务器", description = "DELETE /api/mcp/servers/{id}")
     @DeleteMapping("/servers/{id}")
-    public ResponseEntity<?> deleteServer(@PathVariable String id) {
+    public ResponseEntity<?> deleteServer(@Parameter(description = "服务器ID") @PathVariable String id) {
         if (mcpServerRepository.existsById(id)) {
             // 先断开连接
             mcpManager.disconnect(id);
@@ -244,8 +254,9 @@ public class McpController {
     /**
      * 连接 MCP 服务器
      */
+    @Operation(summary = "连接 MCP 服务器", description = "POST /api/mcp/servers/{id}/connect")
     @PostMapping("/servers/{id}/connect")
-    public ResponseEntity<?> connectServer(@PathVariable String id) {
+    public ResponseEntity<?> connectServer(@Parameter(description = "服务器ID") @PathVariable String id) {
         try {
             mcpManager.connect(id);
             McpServer server = mcpServerRepository.findById(id).orElse(null);
@@ -264,8 +275,9 @@ public class McpController {
     /**
      * 断开 MCP 服务器
      */
+    @Operation(summary = "断开 MCP 服务器", description = "POST /api/mcp/servers/{id}/disconnect")
     @PostMapping("/servers/{id}/disconnect")
-    public ResponseEntity<?> disconnectServer(@PathVariable String id) {
+    public ResponseEntity<?> disconnectServer(@Parameter(description = "服务器ID") @PathVariable String id) {
         mcpManager.disconnect(id);
         return ResponseEntity.ok(Map.of("message", "已断开连接"));
     }
@@ -273,8 +285,9 @@ public class McpController {
     /**
      * 获取 MCP 服务器的工具列表
      */
+    @Operation(summary = "获取 MCP 服务器工具列表", description = "GET /api/mcp/servers/{id}/tools")
     @GetMapping("/servers/{id}/tools")
-    public ResponseEntity<?> getServerTools(@PathVariable String id) {
+    public ResponseEntity<?> getServerTools(@Parameter(description = "服务器ID") @PathVariable String id) {
         try {
             List<McpTypes.Tool> tools = mcpManager.listTools(id);
             return ResponseEntity.ok(Map.of("tools", tools));
@@ -286,8 +299,9 @@ public class McpController {
     /**
      * 调用 MCP 服务器的工具
      */
+    @Operation(summary = "调用 MCP 服务器工具", description = "POST /api/mcp/servers/{id}/call")
     @PostMapping("/servers/{id}/call")
-    public ResponseEntity<?> callTool(@PathVariable String id, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> callTool(@Parameter(description = "服务器ID") @PathVariable String id, @RequestBody Map<String, Object> body) {
         String toolName = (String) body.get("name");
         @SuppressWarnings("unchecked")
         Map<String, Object> arguments = (Map<String, Object>) body.get("arguments");
@@ -307,6 +321,7 @@ public class McpController {
     /**
      * 刷新工具列表
      */
+    @Operation(summary = "刷新已连接服务器的工具列表", description = "POST /api/mcp/refresh-tools")
     @PostMapping("/refresh-tools")
     public ResponseEntity<?> refreshTools() {
         // 刷新所有已连接服务器的工具列表
@@ -333,6 +348,7 @@ public class McpController {
     /**
      * 获取 MCP 统计信息
      */
+    @Operation(summary = "获取 MCP 统计", description = "GET /api/mcp/stats")
     @GetMapping("/stats")
     public ResponseEntity<?> getStats() {
 //        Map<String, Object> stats = mcpManager.getStats();
@@ -346,6 +362,7 @@ public class McpController {
     }
 
 
+    @Operation(summary = "获取 MCP 工具调用状态", description = "GET /api/mcp/state 过滤 delFlag=1")
     @GetMapping("/state")
     public ResponseEntity<?> getState() {
         List<Message> messageList = messageRepository.findAll();
@@ -391,6 +408,7 @@ public class McpController {
         return ResponseEntity.ok(statsMap);
     }
 
+    @Operation(summary = "按ID批量删除 MCP 调用消息", description = "GET /api/mcp/delete?id=...")
     @GetMapping("/delete")
     @Transactional
     public ResponseEntity<?> delete(@RequestParam(required = false) List<String> id) {
@@ -414,6 +432,7 @@ public class McpController {
     /**
      * 获取 MCP 执行记录详情
      */
+    @Operation(summary = "分页获取 MCP 执行记录", description = "GET /api/mcp/executions 支持 toolName/status 过滤")
     @GetMapping("/executions")
     public ResponseEntity<?> executions(
             @RequestParam(defaultValue = "0") int page,

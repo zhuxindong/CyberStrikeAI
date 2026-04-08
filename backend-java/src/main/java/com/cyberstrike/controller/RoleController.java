@@ -1,5 +1,8 @@
 package com.cyberstrike.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -7,6 +10,7 @@ import java.util.*;
 
 @RestController
 @RequestMapping("/api/roles")
+@Tag(name = "Roles", description = "安全测试角色管理接口（内存存储示例）")
 public class RoleController {
 
     // 内存存储角色配置 (生产环境应使用数据库)
@@ -48,13 +52,15 @@ public class RoleController {
         return role;
     }
 
+    @Operation(summary = "列出全部角色", description = "GET /api/roles")
     @GetMapping
     public ResponseEntity<?> listRoles() {
         return ResponseEntity.ok(roles);
     }
 
+    @Operation(summary = "获取角色详情", description = "GET /api/roles/{id}")
     @GetMapping("/{id}")
-    public ResponseEntity<?> getRole(@PathVariable String id) {
+    public ResponseEntity<?> getRole(@Parameter(description = "角色ID") @PathVariable String id) {
         return roles.stream()
                 .filter(r -> id.equals(r.get("id")))
                 .findFirst()
@@ -62,6 +68,7 @@ public class RoleController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @Operation(summary = "创建角色", description = "POST /api/roles 内存示例，生产应持久化")
     @PostMapping
     public ResponseEntity<?> createRole(@RequestBody Map<String, String> body) {
         Map<String, Object> role = createRole(
@@ -72,8 +79,9 @@ public class RoleController {
         return ResponseEntity.ok(role);
     }
 
+    @Operation(summary = "更新角色", description = "PUT /api/roles/{id}")
     @PutMapping("/{id}")
-    public ResponseEntity<?> updateRole(@PathVariable String id, @RequestBody Map<String, String> body) {
+    public ResponseEntity<?> updateRole(@Parameter(description = "角色ID") @PathVariable String id, @RequestBody Map<String, String> body) {
         return roles.stream()
                 .filter(r -> id.equals(r.get("id")))
                 .findFirst()
@@ -87,8 +95,9 @@ public class RoleController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @Operation(summary = "删除角色", description = "DELETE /api/roles/{id}")
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteRole(@PathVariable String id) {
+    public ResponseEntity<?> deleteRole(@Parameter(description = "角色ID") @PathVariable String id) {
         boolean removed = roles.removeIf(r -> id.equals(r.get("id")));
         if (removed) {
             return ResponseEntity.ok(Map.of("message", "删除成功"));

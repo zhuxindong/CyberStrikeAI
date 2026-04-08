@@ -8,6 +8,9 @@ import com.cyberstrike.dto.WebshellFileOpResponse;
 import com.cyberstrike.entity.WebshellConnection;
 import com.cyberstrike.repository.WebshellConnectionRepository;
 import com.cyberstrike.service.WebshellService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -35,6 +38,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/webshell")
+@Tag(name = "Webshell", description = "WebShell 连接、命令执行与文件操作接口")
 public class WebshellController {
 
     private final WebshellConnectionRepository repository;
@@ -45,12 +49,14 @@ public class WebshellController {
         this.webshellService = webshellService;
     }
 
+    @Operation(summary = "列出 WebShell 连接", description = "GET /api/webshell/connections")
     @GetMapping("/connections")
     public ResponseEntity<?> listConnections() {
         List<WebshellConnection> list = repository.findAllByOrderByCreatedAtDesc();
         return ResponseEntity.ok(list);
     }
 
+    @Operation(summary = "创建 WebShell 连接", description = "POST /api/webshell/connections")
     @PostMapping("/connections")
     public ResponseEntity<?> createConnection(@RequestBody Map<String, Object> body) {
         String url = body.get("url") == null ? "" : String.valueOf(body.get("url")).trim();
@@ -73,8 +79,9 @@ public class WebshellController {
         return ResponseEntity.created(URI.create("/api/webshell/connections/" + conn.getId())).body(conn);
     }
 
+    @Operation(summary = "更新 WebShell 连接", description = "PUT /api/webshell/connections/{id}")
     @PutMapping("/connections/{id}")
-    public ResponseEntity<?> updateConnection(@PathVariable String id, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> updateConnection(@Parameter(description = "连接ID") @PathVariable String id, @RequestBody Map<String, Object> body) {
         id = id == null ? "" : id.trim();
         if (id.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "id is required"));
@@ -114,8 +121,9 @@ public class WebshellController {
         return ResponseEntity.ok(conn);
     }
 
+    @Operation(summary = "删除 WebShell 连接", description = "DELETE /api/webshell/connections/{id}")
     @DeleteMapping("/connections/{id}")
-    public ResponseEntity<?> deleteConnection(@PathVariable String id) {
+    public ResponseEntity<?> deleteConnection(@Parameter(description = "连接ID") @PathVariable String id) {
         id = id == null ? "" : id.trim();
         if (id.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "id is required"));
@@ -135,6 +143,7 @@ public class WebshellController {
      * 执行命令（POST /api/webshell/exec）
      * 对齐 Go：cyberstrike-ai/internal/handler/webshell.go Exec
      */
+    @Operation(summary = "执行命令", description = "POST /api/webshell/exec")
     @PostMapping("/exec")
     public ResponseEntity<?> exec(@Valid @RequestBody WebshellExecRequest request) {
         WebshellExecResponse response = webshellService.exec(request);
@@ -146,6 +155,7 @@ public class WebshellController {
      * 支持：list, read, delete, write, mkdir, rename, upload, upload_chunk
      * 对齐 Go：cyberstrike-ai/internal/handler/webshell.go FileOp
      */
+    @Operation(summary = "文件操作", description = "POST /api/webshell/fileop 支持 list/read/delete/write/mkdir/rename/upload 等")
     @PostMapping("/fileop")
     public ResponseEntity<?> fileOp(@Valid @RequestBody WebshellFileOpRequest request) {
         WebshellFileOpResponse response = webshellService.fileOp(request);
@@ -156,8 +166,9 @@ public class WebshellController {
      * 使用已保存的连接执行命令（POST /api/webshell/connections/{id}/exec）
      * 对齐 Go：cyberstrike-ai/internal/handler/webshell.go ExecWithConnection
      */
+    @Operation(summary = "使用已保存连接执行命令", description = "POST /api/webshell/connections/{id}/exec")
     @PostMapping("/connections/{id}/exec")
-    public ResponseEntity<?> execWithConnection(@PathVariable String id, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> execWithConnection(@Parameter(description = "连接ID") @PathVariable String id, @RequestBody Map<String, Object> body) {
         id = id == null ? "" : id.trim();
         if (id.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "id is required"));
@@ -176,8 +187,9 @@ public class WebshellController {
      * 使用已保存的连接执行文件操作（POST /api/webshell/connections/{id}/fileop）
      * 对齐 Go：cyberstrike-ai/internal/handler/webshell.go FileOpWithConnection
      */
+    @Operation(summary = "使用已保存连接进行文件操作", description = "POST /api/webshell/connections/{id}/fileop")
     @PostMapping("/connections/{id}/fileop")
-    public ResponseEntity<?> fileOpWithConnection(@PathVariable String id, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> fileOpWithConnection(@Parameter(description = "连接ID") @PathVariable String id, @RequestBody Map<String, Object> body) {
         id = id == null ? "" : id.trim();
         if (id.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "id is required"));
@@ -202,8 +214,9 @@ public class WebshellController {
      * 获取指定 WebShell 连接的 AI 助手对话历史（GET /api/webshell/connections/{id}/ai-history）
      * 对齐 Go：cyberstrike-ai/internal/handler/webshell.go GetAIHistory
      */
+    @Operation(summary = "获取连接的 AI 助手历史", description = "GET /api/webshell/connections/{id}/ai-history")
     @GetMapping("/connections/{id}/ai-history")
-    public ResponseEntity<?> getAIHistory(@PathVariable String id) {
+    public ResponseEntity<?> getAIHistory(@Parameter(description = "连接ID") @PathVariable String id) {
         id = id == null ? "" : id.trim();
         if (id.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "id is required"));
@@ -217,8 +230,9 @@ public class WebshellController {
      * 列出该 WebShell 连接下的所有 AI 对话（GET /api/webshell/connections/{id}/conversations）
      * 对齐 Go：cyberstrike-ai/internal/handler/webshell.go ListAIConversations
      */
+    @Operation(summary = "列出连接下的 AI 对话", description = "GET /api/webshell/connections/{id}/conversations")
     @GetMapping("/connections/{id}/conversations")
-    public ResponseEntity<?> listAIConversations(@PathVariable String id) {
+    public ResponseEntity<?> listAIConversations(@Parameter(description = "连接ID") @PathVariable String id) {
         id = id == null ? "" : id.trim();
         if (id.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "id is required"));

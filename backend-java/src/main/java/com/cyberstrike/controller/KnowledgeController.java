@@ -6,6 +6,9 @@ import com.cyberstrike.repository.KnowledgeItemRepository;
 import com.cyberstrike.service.KnowledgeRetriever;
 import com.cyberstrike.service.KnowledgeService;
 import com.cyberstrike.tool.ToolRegistry;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +25,7 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/api/knowledge")
+@Tag(name = "Knowledge", description = "知识库分类、项管理与检索接口")
 public class KnowledgeController {
 
     private static final Logger logger = LoggerFactory.getLogger(KnowledgeController.class);
@@ -40,6 +44,7 @@ public class KnowledgeController {
      * GET /api/knowledge/categories
      * 对齐 Go：handler GetCategories
      */
+    @Operation(summary = "获取所有分类", description = "GET /api/knowledge/categories")
     @GetMapping("/categories")
     public ResponseEntity<Map<String, Object>> getCategories() {
         List<String> categories = knowledgeService.getCategories();
@@ -51,6 +56,7 @@ public class KnowledgeController {
      * GET /api/knowledge/items?category=&search=&limit=20&offset=0&categoryPage=true
      * 对齐 Go：handler GetItems
      */
+    @Operation(summary = "分页/搜索知识项", description = "GET /api/knowledge/items 支持按分类、关键字、分页")
     @GetMapping("/items")
     public ResponseEntity<Map<String, Object>> getItems(
             @RequestParam(required = false) String category,
@@ -156,13 +162,15 @@ public class KnowledgeController {
      * GET /api/knowledge/items/{id}
      * 对齐 Go：handler GetItem
      */
+    @Operation(summary = "获取单个知识项", description = "GET /api/knowledge/items/{id}")
     @GetMapping("/items/{id}")
-    public ResponseEntity<?> getItem(@PathVariable String id) {
+    public ResponseEntity<?> getItem(@Parameter(description = "知识项ID") @PathVariable String id) {
         return repository.findById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @Operation(summary = "按ID列表获取知识项", description = "GET /api/knowledge/items/list?ids=... 为空则返回全部")
     @GetMapping("/items/list")
     public ResponseEntity<?> getItems(@RequestParam(required = false) String ids) {
         if (ids == null || ids.trim().isEmpty()) {
@@ -192,6 +200,7 @@ public class KnowledgeController {
      * POST /api/knowledge/items
      * 对齐 Go：handler CreateItem
      */
+    @Operation(summary = "创建知识项", description = "POST /api/knowledge/items")
     @PostMapping("/items")
     public ResponseEntity<?> createItem(@RequestBody Map<String, String> request) {
         String category = request.get("category");
@@ -228,8 +237,9 @@ public class KnowledgeController {
      * PUT /api/knowledge/items/{id}
      * 对齐 Go：handler UpdateItem
      */
+    @Operation(summary = "更新知识项", description = "PUT /api/knowledge/items/{id}")
     @PutMapping("/items/{id}")
-    public ResponseEntity<?> updateItem(@PathVariable String id, @RequestBody Map<String, String> request) {
+    public ResponseEntity<?> updateItem(@Parameter(description = "知识项ID") @PathVariable String id, @RequestBody Map<String, String> request) {
         String category = request.get("category");
         String title = request.get("title");
         String content = request.get("content");
@@ -264,8 +274,9 @@ public class KnowledgeController {
      * DELETE /api/knowledge/items/{id}
      * 对齐 Go：handler DeleteItem
      */
+    @Operation(summary = "删除知识项", description = "DELETE /api/knowledge/items/{id}")
     @DeleteMapping("/items/{id}")
-    public ResponseEntity<?> deleteItem(@PathVariable String id) {
+    public ResponseEntity<?> deleteItem(@Parameter(description = "知识项ID") @PathVariable String id) {
         try {
             knowledgeService.deleteItem(id);
             return ResponseEntity.ok(Map.of("message", "删除成功"));
@@ -281,6 +292,7 @@ public class KnowledgeController {
      * POST /api/knowledge/scan
      * 对齐 Go：handler ScanKnowledgeBase
      */
+    @Operation(summary = "扫描知识库并索引新增/更新项", description = "POST /api/knowledge/scan")
     @PostMapping("/scan")
     public ResponseEntity<Map<String, Object>> scanKnowledgeBase() {
         try {
@@ -318,6 +330,7 @@ public class KnowledgeController {
      * POST /api/knowledge/index
      * 对齐 Go：handler RebuildIndex
      */
+    @Operation(summary = "重建索引", description = "POST /api/knowledge/index")
     @PostMapping("/index")
     public ResponseEntity<Map<String, Object>> rebuildIndex() {
         new Thread(() -> {
@@ -331,6 +344,7 @@ public class KnowledgeController {
      * GET /api/knowledge/index/status
      * 对齐 Go：handler GetIndexStatus
      */
+    @Operation(summary = "获取索引状态", description = "GET /api/knowledge/index/status")
     @GetMapping("/index/status")
     public ResponseEntity<Map<String, Object>> getIndexStatus() {
         Map<String, Object> status = knowledgeService.getIndexStatus();
@@ -342,6 +356,7 @@ public class KnowledgeController {
      * GET /api/knowledge/retrieval-logs?conversationId=&messageId=&limit=50
      * 对齐 Go：handler GetRetrievalLogs
      */
+    @Operation(summary = "获取检索日志", description = "GET /api/knowledge/retrieval-logs 支持 conversationId/messageId 过滤")
     @GetMapping("/retrieval-logs")
     public ResponseEntity<Map<String, Object>> getRetrievalLogs(
             @RequestParam(required = false) String conversationId,
@@ -361,8 +376,9 @@ public class KnowledgeController {
      * DELETE /api/knowledge/retrieval-logs/{id}
      * 对齐 Go：handler DeleteRetrievalLog
      */
+    @Operation(summary = "删除检索日志", description = "DELETE /api/knowledge/retrieval-logs/{id}")
     @DeleteMapping("/retrieval-logs/{id}")
-    public ResponseEntity<?> deleteRetrievalLog(@PathVariable String id) {
+    public ResponseEntity<?> deleteRetrievalLog(@Parameter(description = "检索日志ID") @PathVariable String id) {
         try {
             knowledgeService.deleteRetrievalLog(id);
             return ResponseEntity.ok(Map.of("message", "删除成功"));
@@ -378,6 +394,7 @@ public class KnowledgeController {
      * GET /api/knowledge/stats
      * 对齐 Go：handler GetStats
      */
+    @Operation(summary = "获取知识库统计", description = "GET /api/knowledge/stats")
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Object>> getStats() {
         Map<String, Object> stats = knowledgeService.getStats();
@@ -389,6 +406,7 @@ public class KnowledgeController {
      * POST /api/knowledge/search
      * 对齐 Go：handler Search
      */
+    @Operation(summary = "知识库检索（POST）", description = "POST /api/knowledge/search 支持 topK/threshold/riskType")
     @PostMapping("/search")
     public ResponseEntity<Map<String, Object>> search(@RequestBody Map<String, Object> request) {
         String query = (String) request.get("query");
@@ -430,6 +448,7 @@ public class KnowledgeController {
      * Search test endpoint (GET)
      * GET /api/knowledge/search?query=xxx
      */
+    @Operation(summary = "知识库检索（GET 简化版）", description = "GET /api/knowledge/search?query=")
     @GetMapping("/search")
     public List<Map<String, Object>> searchGet(@RequestParam String query) {
         List<KnowledgeRetriever.RetrievalResult> results = knowledgeService.searchWithChunks(query, null, 5, 0.7);

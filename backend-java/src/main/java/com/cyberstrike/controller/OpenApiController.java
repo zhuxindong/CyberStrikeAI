@@ -26,7 +26,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/openapi")
-@Tag(name = "OpenAPI")
+@Tag(name = "OpenAPI", description = "对外结果聚合接口")
 @SecurityRequirement(name = "bearerAuth")
 public class OpenApiController {
 
@@ -47,7 +47,7 @@ public class OpenApiController {
 
     @Operation(
             summary = "获取对话结果聚合",
-            description = "聚合返回指定对话的消息、漏洞、工具执行记录，等价于Go端 /openapi/conversations/{id}/results",
+            description = "聚合返回指定对话的消息、漏洞、工具执行记录",
             responses = {
                     @ApiResponse(responseCode = "200", description = "成功",
                             content = @Content(mediaType = "application/json")),

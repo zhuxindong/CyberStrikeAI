@@ -7,7 +7,7 @@ spring:
   datasource:
     url: jdbc:mysql://127.0.0.1:3306/cbai?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
     username: root
-    password: ""
+    password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
@@ -20,7 +20,7 @@ spring:
 
   ai:
     openai:
-      api-key: ${}
+      api-key: sk-zhuxindong-666
       base-url: https://papi.zhile.in
       chat:
         options:
@@ -32,6 +32,53 @@ logging:
     com.cyberstrike: DEBUG
     org.springframework: INFO
 
+# OpenAPI/Swagger 配置
+app:
+  openapi:
+    title: CyberStrikeAI API
+    description: AI驱动的自动化安全测试平台API文档
+    version: 1.0.0
+  # 如果有外部网关/域名，可设置对外访问地址；留空默认使用 http://localhost:${server.port}
+  server-url: ""
+  swagger:
+    token: "CyberStrikeAI"  # 配置你的静态 token
+    token-header: X-Auth-Token      # 自定义 header 名称（可选，默认为 X-Auth-Token）
+
 security:
-  tools-dir: ../tools
+  tools-dir: ./tools
+  skills-dir: ./skills  # 相对于backend-java目录
+  knowledge-dir: ./knowledge_base
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,heapdump  # 暴露 heapdump 端点
+  endpoint:
+    heapdump:
+      enabled: true  # 启用 heapdump 端点
+
+# Knowledge Indexer Configuration
+knowledge:
+  indexer:
+    chunk-size: 512
+    chunk-overlap: 50
+    max-chunks-per-item: 0
+  retriever:
+    top-k: 5
+    similarity-threshold: 0.7
+    hybrid-weight: 0.7
+
+# SpringDoc配置
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+
+
+
 

@@ -6,6 +6,9 @@ import com.cyberstrike.entity.GroupConversation;
 import com.cyberstrike.repository.ConversationRepository;
 import com.cyberstrike.repository.GroupConversationRepository;
 import com.cyberstrike.repository.GroupRepository;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,6 +18,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/groups")
+@Tag(name = "Groups", description = "对话分组管理接口")
 public class GroupController {
 
     private final GroupRepository groupRepository;
@@ -29,7 +33,7 @@ public class GroupController {
         this.conversationRepository = conversationRepository;
     }
 
-    // POST /api/groups - 创建分组
+    @Operation(summary = "创建分组", description = "POST /api/groups")
     @PostMapping
     public ResponseEntity<?> createGroup(@RequestBody Map<String, String> body) {
         Group group = new Group();
@@ -43,24 +47,24 @@ public class GroupController {
         return ResponseEntity.ok(group);
     }
 
-    // GET /api/groups - 列出所有分组
+    @Operation(summary = "列出所有分组", description = "GET /api/groups")
     @GetMapping
     public ResponseEntity<?> listGroups() {
         List<Group> groups = groupRepository.findAllByOrderByPinnedDescCreatedAtDesc();
         return ResponseEntity.ok(groups);
     }
 
-    // GET /api/groups/:id - 获取分组
+    @Operation(summary = "获取分组详情", description = "GET /api/groups/{id}")
     @GetMapping("/{id}")
-    public ResponseEntity<?> getGroup(@PathVariable String id) {
+    public ResponseEntity<?> getGroup(@Parameter(description = "分组ID") @PathVariable String id) {
         return groupRepository.findById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // PUT /api/groups/:id - 更新分组
+    @Operation(summary = "更新分组", description = "PUT /api/groups/{id}")
     @PutMapping("/{id}")
-    public ResponseEntity<?> updateGroup(@PathVariable String id, @RequestBody Map<String, String> body) {
+    public ResponseEntity<?> updateGroup(@Parameter(description = "分组ID") @PathVariable String id, @RequestBody Map<String, String> body) {
         return groupRepository.findById(id)
                 .map(group -> {
                     if (body.containsKey("name"))
@@ -74,9 +78,9 @@ public class GroupController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // DELETE /api/groups/:id - 删除分组
+    @Operation(summary = "删除分组", description = "DELETE /api/groups/{id}")
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteGroup(@PathVariable String id) {
+    public ResponseEntity<?> deleteGroup(@Parameter(description = "分组ID") @PathVariable String id) {
         if (groupRepository.existsById(id)) {
             groupConversationRepository.deleteByGroupId(id);
             groupRepository.deleteById(id);
@@ -85,7 +89,7 @@ public class GroupController {
         return ResponseEntity.notFound().build();
     }
 
-    // POST /api/groups/conversation - 添加对话到分组
+    @Operation(summary = "将对话加入分组", description = "POST /api/groups/conversation")
     @PostMapping("/conversation")
     public ResponseEntity<?> addConversationToGroup(@RequestBody Map<String, String> body) {
         String conversationId = body.get("conversationId");
@@ -117,16 +121,16 @@ public class GroupController {
         return ResponseEntity.ok(Map.of("message", "添加成功"));
     }
 
-    // DELETE /api/groups/:gid/conversations/:cid - 从分组移除对话
+    @Operation(summary = "从分组移除对话", description = "DELETE /api/groups/{gid}/conversations/{cid}")
     @DeleteMapping("/{gid}/conversations/{cid}")
-    public ResponseEntity<?> removeConversationFromGroup(@PathVariable String gid, @PathVariable String cid) {
+    public ResponseEntity<?> removeConversationFromGroup(@Parameter(description = "分组ID") @PathVariable String gid, @Parameter(description = "对话ID") @PathVariable String cid) {
         groupConversationRepository.deleteByGroupIdAndConversationId(gid, cid);
         return ResponseEntity.ok(Map.of("message", "移除成功"));
     }
 
-    // GET /api/groups/:id/conversations - 获取分组中的所有对话
+    @Operation(summary = "获取分组下对话列表", description = "GET /api/groups/{id}/conversations")
     @GetMapping("/{id}/conversations")
-    public ResponseEntity<?> getGroupConversations(@PathVariable String id) {
+    public ResponseEntity<?> getGroupConversations(@Parameter(description = "分组ID") @PathVariable String id) {
         if (!groupRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
         }
@@ -162,9 +166,9 @@ public class GroupController {
         return ResponseEntity.ok(result);
     }
 
-    // PUT /api/groups/:id/pinned - 更新分组置顶状态
+    @Operation(summary = "置顶/取消置顶分组", description = "PUT /api/groups/{id}/pinned")
     @PutMapping("/{id}/pinned")
-    public ResponseEntity<?> updateGroupPinned(@PathVariable String id, @RequestBody Map<String, Boolean> body) {
+    public ResponseEntity<?> updateGroupPinned(@Parameter(description = "分组ID") @PathVariable String id, @RequestBody Map<String, Boolean> body) {
         return groupRepository.findById(id)
                 .map(group -> {
                     group.setPinned(body.getOrDefault("pinned", false));
@@ -175,11 +179,11 @@ public class GroupController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // PUT /api/groups/:gid/conversations/:cid/pinned - 更新对话在分组中的置顶状态
+    @Operation(summary = "更新对话在分组中的置顶状态", description = "PUT /api/groups/{gid}/conversations/{cid}/pinned")
     @PutMapping("/{gid}/conversations/{cid}/pinned")
     public ResponseEntity<?> updateConversationPinnedInGroup(
-            @PathVariable String gid,
-            @PathVariable String cid,
+            @Parameter(description = "分组ID") @PathVariable String gid,
+            @Parameter(description = "对话ID") @PathVariable String cid,
             @RequestBody Map<String, Boolean> body) {
 
         return groupConversationRepository.findByGroupIdAndConversationId(gid, cid)

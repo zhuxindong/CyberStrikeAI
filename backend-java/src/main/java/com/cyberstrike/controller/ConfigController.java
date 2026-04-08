@@ -6,6 +6,8 @@ import com.cyberstrike.service.openai.OpenAiService;
 import com.cyberstrike.tool.ToolRegistry;
 import com.cyberstrike.tool.YamlToolLoader;
 import com.cyberstrike.tool.YamlToolDefinition;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,6 +18,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/config")
+@Tag(name = "Config", description = "配置管理与工具开关接口")
 public class ConfigController {
 
     private final ToolRegistry toolRegistry;
@@ -46,6 +49,7 @@ public class ConfigController {
 //        config.put("theme", "dark");
     }
 
+    @Operation(summary = "获取配置", description = "GET /api/config")
     @GetMapping
     public ResponseEntity<?> getConfig() {
         java.util.Optional<Config> optionalConfig = configRepository.findById(1l);
@@ -57,6 +61,7 @@ public class ConfigController {
         return null;
     }
 
+    @Operation(summary = "更新配置并刷新 OpenAI 客户端", description = "PUT /api/config")
     @PutMapping
     public ResponseEntity<?> updateConfig(@RequestBody Config config) {
         //config.putAll(body);
@@ -87,6 +92,7 @@ public class ConfigController {
 //        return ResponseEntity.ok(Map.of("tools", toolList));
 //    }
 
+    @Operation(summary = "分页列出 YAML 工具", description = "GET /api/config/tools 支持搜索")
     @GetMapping("/tools")
     public ResponseEntity<?> getTools(
             @RequestParam(defaultValue = "1") int page,
@@ -170,6 +176,7 @@ public class ConfigController {
     /**
      * 切换工具启用/禁用状态
      */
+    @Operation(summary = "批量更新工具启用状态", description = "POST /api/config/tools/update 写回 YAML")
     @PostMapping("/tools/update")
     public ResponseEntity<?> toggleTool(@RequestBody List<Map<String, Object>> list) throws IOException {
         for (Map<String, Object> map: list){
@@ -193,6 +200,7 @@ public class ConfigController {
     /**
      * 刷新工具列表
      */
+    @Operation(summary = "刷新工具列表", description = "POST /api/config/tools/refresh 重新加载 ToolRegistry")
     @PostMapping("/tools/refresh")
     public ResponseEntity<?> refreshTools() {
         toolRegistry.refresh();
@@ -201,6 +209,7 @@ public class ConfigController {
                 "count", toolRegistry.getTools().size()));
     }
 
+    @Operation(summary = "应用配置并刷新工具", description = "POST /api/config/apply")
     @PostMapping("/apply")
     public ResponseEntity<?> applyConfig() {
         // 应用配置的逻辑，比如重新加载工具等

@@ -5,6 +5,9 @@ import com.cyberstrike.entity.Conversation;
 import com.cyberstrike.entity.Message;
 import com.cyberstrike.repository.ConversationRepository;
 import com.cyberstrike.repository.MessageRepository;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.BeanUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +18,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/conversations")
+@Tag(name = "Conversations", description = "对话与消息管理接口")
 public class ConversationController {
 
     private final ConversationRepository conversationRepository;
@@ -27,6 +31,7 @@ public class ConversationController {
     }
 
     // 创建对话
+    @Operation(summary = "创建对话", description = "POST /api/conversations")
     @PostMapping
     public ResponseEntity<Conversation> createConversation(@RequestBody Map<String, String> body) {
         Conversation conversation = new Conversation();
@@ -41,6 +46,7 @@ public class ConversationController {
     }
 
     // 对话列表
+    @Operation(summary = "分页查询对话列表", description = "GET /api/conversations 支持搜索")
     @GetMapping
     public ResponseEntity<List<Conversation>> listConversations(
             @RequestParam(defaultValue = "50") int limit,
@@ -60,14 +66,16 @@ public class ConversationController {
         return ResponseEntity.ok(conversations.subList(offset, end));
     }
 
+    @Operation(summary = "查询运行中的对话任务", description = "GET /api/conversations/tasks")
     @GetMapping("/tasks")
     public ResponseEntity<List<Conversation>> tasks() {
         return ResponseEntity.ok(conversationRepository.findByStatus("running"));
     }
 
     // 获取对话详情 (包含消息)
+    @Operation(summary = "获取对话详情（含消息汇总）", description = "GET /api/conversations/{id}")
     @GetMapping("/{id}")
-    public ResponseEntity<?> getConversation(@PathVariable String id) {
+    public ResponseEntity<?> getConversation(@Parameter(description = "对话ID") @PathVariable String id) {
         return conversationRepository.findById(id)
                 .map(conversation -> {
                     // 1. 查询并排序
@@ -127,8 +135,9 @@ public class ConversationController {
     }
 
     // 更新对话
+    @Operation(summary = "更新对话元数据", description = "PUT /api/conversations/{id}")
     @PutMapping("/{id}")
-    public ResponseEntity<?> updateConversation(@PathVariable String id, @RequestBody Map<String, String> body) {
+    public ResponseEntity<?> updateConversation(@Parameter(description = "对话ID") @PathVariable String id, @RequestBody Map<String, String> body) {
         return conversationRepository.findById(id)
                 .map(conversation -> {
                     if (body.containsKey("title")) {
@@ -142,8 +151,9 @@ public class ConversationController {
     }
 
     // 删除对话
+    @Operation(summary = "删除对话及其消息", description = "DELETE /api/conversations/{id}")
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteConversation(@PathVariable String id) {
+    public ResponseEntity<?> deleteConversation(@Parameter(description = "对话ID") @PathVariable String id) {
         if (conversationRepository.existsById(id)) {
             // 先删除关联消息
             messageRepository.deleteByConversationId(id);
@@ -156,8 +166,9 @@ public class ConversationController {
     }
 
     // 置顶/取消置顶对话
+    @Operation(summary = "置顶/取消置顶对话", description = "PUT /api/conversations/{id}/pinned")
     @PutMapping("/{id}/pinned")
-    public ResponseEntity<?> togglePinned(@PathVariable String id, @RequestBody Map<String, Boolean> body) {
+    public ResponseEntity<?> togglePinned(@Parameter(description = "对话ID") @PathVariable String id, @RequestBody Map<String, Boolean> body) {
         return conversationRepository.findById(id)
                 .map(conversation -> {
                     conversation.setPinned(body.getOrDefault("pinned", false));

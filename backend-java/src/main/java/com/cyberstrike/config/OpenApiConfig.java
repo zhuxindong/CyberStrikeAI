@@ -32,11 +32,11 @@ public class OpenApiConfig {
                 ? serverUrl
                 : "http://localhost:" + port;
 
-        SecurityScheme bearer = new SecurityScheme()
-                .type(SecurityScheme.Type.HTTP)
-                .scheme("bearer")
-                .bearerFormat("JWT")
-                .description("使用Bearer Token进行认证。Token通过 /api/auth/login 接口获取。");
+//        SecurityScheme bearer = new SecurityScheme()
+//                .type(SecurityScheme.Type.HTTP)
+//                .scheme("bearer")
+//                .bearerFormat("JWT")
+//                .description("使用Bearer Token进行认证。Token通过 /api/auth/login 接口获取。");
 
         return new OpenAPI()
                 .info(new Info()
@@ -45,7 +45,7 @@ public class OpenApiConfig {
                         .version(version)
                         .contact(new Contact().name("CyberStrikeAI")))
                 .servers(List.of(new Server().url(url).description("当前服务器")))
-                .components(new Components().addSecuritySchemes("bearerAuth", bearer))
+//                .components(new Components().addSecuritySchemes("bearerAuth", bearer))
                 .addSecurityItem(new SecurityRequirement().addList("bearerAuth"));
     }
 }

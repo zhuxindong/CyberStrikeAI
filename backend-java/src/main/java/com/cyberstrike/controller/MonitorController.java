@@ -2,6 +2,9 @@ package com.cyberstrike.controller;
 
 import com.cyberstrike.entity.ToolExecution;
 import com.cyberstrike.repository.ToolExecutionRepository;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -9,6 +12,7 @@ import java.util.*;
 
 @RestController
 @RequestMapping("/api/monitor")
+@Tag(name = "Monitor", description = "工具执行监控与统计接口")
 public class MonitorController {
 
     private final ToolExecutionRepository toolExecutionRepository;
@@ -17,6 +21,7 @@ public class MonitorController {
         this.toolExecutionRepository = toolExecutionRepository;
     }
 
+    @Operation(summary = "分页查询工具执行记录", description = "GET /api/monitor 支持 limit/offset")
     @GetMapping
     public ResponseEntity<?> getExecutions(
             @RequestParam(defaultValue = "50") int limit,
@@ -30,13 +35,15 @@ public class MonitorController {
         return ResponseEntity.ok(page);
     }
 
+    @Operation(summary = "获取单条执行记录", description = "GET /api/monitor/execution/{id}")
     @GetMapping("/execution/{id}")
-    public ResponseEntity<?> getExecution(@PathVariable String id) {
+    public ResponseEntity<?> getExecution(@Parameter(description = "执行记录ID") @PathVariable String id) {
         return toolExecutionRepository.findById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @Operation(summary = "获取执行统计", description = "GET /api/monitor/stats 包含工具调用与状态统计")
     @GetMapping("/stats")
     public ResponseEntity<?> getStats() {
         Map<String, Object> stats = new HashMap<>();
@@ -64,8 +71,9 @@ public class MonitorController {
         return ResponseEntity.ok(stats);
     }
 
+    @Operation(summary = "删除单条执行记录", description = "DELETE /api/monitor/execution/{id}")
     @DeleteMapping("/execution/{id}")
-    public ResponseEntity<?> deleteExecution(@PathVariable String id) {
+    public ResponseEntity<?> deleteExecution(@Parameter(description = "执行记录ID") @PathVariable String id) {
         if (toolExecutionRepository.existsById(id)) {
             toolExecutionRepository.deleteById(id);
             return ResponseEntity.ok(Map.of("message", "删除成功"));
@@ -73,6 +81,7 @@ public class MonitorController {
         return ResponseEntity.notFound().build();
     }
 
+    @Operation(summary = "清空所有执行记录", description = "DELETE /api/monitor/executions")
     @DeleteMapping("/executions")
     public ResponseEntity<?> clearExecutions() {
         toolExecutionRepository.deleteAll();

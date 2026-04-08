@@ -1,5 +1,7 @@
 package com.cyberstrike.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -13,6 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
 @RequestMapping("/api/auth")
+@Tag(name = "Auth", description = "登录、登出与会话校验接口（演示版内存 Token）")
 public class AuthController {
 
     @Value("${app.password:admin}")
@@ -24,6 +27,7 @@ public class AuthController {
     // 简单的内存 Token 存储 (生产环境应使用 Redis 或 JWT)
     private final Map<String, LocalDateTime> tokens = new ConcurrentHashMap<>();
 
+    @Operation(summary = "登录获取 Token", description = "POST /api/auth/login，使用 app.password 校验")
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody Map<String, String> body) {
         String password = body.get("password");
@@ -41,6 +45,7 @@ public class AuthController {
         return ResponseEntity.status(401).body(Map.of("error", "密码错误"));
     }
 
+    @Operation(summary = "退出登录", description = "POST /api/auth/logout，移除内存中的 Token")
     @PostMapping("/logout")
     public ResponseEntity<?> logout(@RequestHeader(value = "Authorization", required = false) String auth) {
         if (auth != null && auth.startsWith("Bearer ")) {
@@ -50,6 +55,7 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("message", "已退出登录"));
     }
 
+    @Operation(summary = "修改密码（演示版，仅内存校验）", description = "POST /api/auth/change-password，实际需持久化")
     @PostMapping("/change-password")
     public ResponseEntity<?> changePassword(@RequestBody Map<String, String> body) {
         String oldPassword = body.get("oldPassword");
@@ -65,6 +71,7 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("message", "密码修改成功，请重启服务生效"));
     }
 
+    @Operation(summary = "校验 Token", description = "GET /api/auth/validate，Bearer Token 必填")
     @GetMapping("/validate")
     public ResponseEntity<?> validate(@RequestHeader(value = "Authorization", required = false) String auth) {
         if (auth != null && auth.startsWith("Bearer ")) {

@@ -3,6 +3,9 @@ package com.cyberstrike.controller;
 import com.cyberstrike.skills.Skill;
 import com.cyberstrike.skills.SkillsManager;
 import com.cyberstrike.service.SkillsStatsService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +22,7 @@ import java.util.*;
  */
 @RestController
 @RequestMapping("/api/skills")
+@Tag(name = "Skills", description = "技能定义与统计管理接口")
 public class SkillsController {
 
     private static final Logger logger = LoggerFactory.getLogger(SkillsController.class);
@@ -37,6 +41,7 @@ public class SkillsController {
      * GET /api/skills?search=&limit=20&offset=0
      * 对齐 Go：handler GetSkills
      */
+    @Operation(summary = "分页查询技能列表", description = "GET /api/skills?search=&page=&size=")
     @GetMapping
     public ResponseEntity<Map<String, Object>> getSkills(
             @RequestParam(required = false) String search,
@@ -63,8 +68,9 @@ public class SkillsController {
      * GET /api/skills/{name}
      * 对齐 Go：handler GetSkill
      */
+    @Operation(summary = "获取单个技能详情", description = "GET /api/skills/{name}")
     @GetMapping("/{name}")
-    public ResponseEntity<Map<String, Object>> getSkill(@PathVariable String name) {
+    public ResponseEntity<Map<String, Object>> getSkill(@Parameter(description = "技能名称") @PathVariable String name) {
         if (name == null || name.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "skill名称不能为空"));
         }
@@ -85,8 +91,9 @@ public class SkillsController {
      * GET /api/skills/{name}/roles
      * 对齐 Go：handler GetSkillBoundRoles
      */
+    @Operation(summary = "获取绑定指定技能的角色列表", description = "GET /api/skills/{name}/roles")
     @GetMapping("/{name}/roles")
-    public ResponseEntity<Map<String, Object>> getSkillBoundRoles(@PathVariable String name) {
+    public ResponseEntity<Map<String, Object>> getSkillBoundRoles(@Parameter(description = "技能名称") @PathVariable String name) {
         if (name == null || name.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "skill名称不能为空"));
         }
@@ -106,6 +113,7 @@ public class SkillsController {
      * POST /api/skills
      * 对齐 Go：handler CreateSkill
      */
+    @Operation(summary = "创建新技能", description = "POST /api/skills")
     @PostMapping
     public ResponseEntity<Map<String, Object>> createSkill(@RequestBody Map<String, String> request) {
         String name = request.get("name");
@@ -140,9 +148,10 @@ public class SkillsController {
      * PUT /api/skills/{name}
      * 对齐 Go：handler UpdateSkill
      */
+    @Operation(summary = "更新技能", description = "PUT /api/skills/{name}")
     @PutMapping("/{name}")
     public ResponseEntity<Map<String, Object>> updateSkill(
-            @PathVariable String name,
+            @Parameter(description = "技能名称") @PathVariable String name,
             @RequestBody Map<String, String> request) {
         
         if (name == null || name.isEmpty()) {
@@ -170,8 +179,9 @@ public class SkillsController {
      * DELETE /api/skills/{name}
      * 对齐 Go：handler DeleteSkill
      */
+    @Operation(summary = "删除技能", description = "DELETE /api/skills/{name}")
     @DeleteMapping("/{name}")
-    public ResponseEntity<Map<String, Object>> deleteSkill(@PathVariable String name) {
+    public ResponseEntity<Map<String, Object>> deleteSkill(@Parameter(description = "技能名称") @PathVariable String name) {
         if (name == null || name.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "skill名称不能为空"));
         }
@@ -190,6 +200,7 @@ public class SkillsController {
      * GET /api/skills/stats
      * 对齐 Go：handler GetSkillStats
      */
+    @Operation(summary = "获取技能调用统计", description = "GET /api/skills/stats")
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Object>> getSkillStats() {
         List<String> skillList = skillsManager.listSkills();
@@ -214,6 +225,7 @@ public class SkillsController {
      * DELETE /api/skills/stats
      * 对齐 Go：handler ClearSkillStats
      */
+    @Operation(summary = "清空全部技能统计", description = "DELETE /api/skills/stats")
     @DeleteMapping("/stats")
     public ResponseEntity<Map<String, Object>> clearSkillStats() {
         try {
@@ -232,8 +244,9 @@ public class SkillsController {
      * DELETE /api/skills/stats/{name}
      * 对齐 Go：handler ClearSkillStatsByName
      */
+    @Operation(summary = "清空指定技能统计", description = "DELETE /api/skills/stats/{name}")
     @DeleteMapping("/stats/{name}")
-    public ResponseEntity<Map<String, Object>> clearSkillStatsByName(@PathVariable String name) {
+    public ResponseEntity<Map<String, Object>> clearSkillStatsByName(@Parameter(description = "技能名称") @PathVariable String name) {
         if (name == null || name.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "skill名称不能为空"));
         }
@@ -253,8 +266,9 @@ public class SkillsController {
      * 获取skill的完整内容（用于测试/调试）
      * GET /api/skills/{name}/content
      */
+    @Operation(summary = "获取技能完整内容", description = "GET /api/skills/{name}/content")
     @GetMapping("/{name}/content")
-    public ResponseEntity<Map<String, Object>> getSkillContent(@PathVariable String name) {
+    public ResponseEntity<Map<String, Object>> getSkillContent(@Parameter(description = "技能名称") @PathVariable String name) {
         if (name == null || name.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "skill名称不能为空"));
         }
