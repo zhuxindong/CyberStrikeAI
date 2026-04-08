@@ -8,15 +8,23 @@ export interface StreamCallbacks {
 }
 
 // 滚动到底部
-export const scrollToBottom = (container: HTMLElement | null) => {
+export const scrollToBottom = (container: HTMLElement | null, target?: HTMLElement) => {
   if (!container) {
     return;
   }
   setTimeout(() => {
-    container.scrollBy({
-      top: container.scrollHeight,
-      behavior: 'smooth'
-    });
+    if (target) {
+      target.scrollIntoView({
+        behavior: 'smooth',  // 平滑滚动
+        block: 'end',        // 垂直对齐到底部
+        inline: 'nearest'    // 水平对齐方式
+      });
+    } else {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
   }, 300);
 };
 

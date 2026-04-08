@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import { Plus, ChatDotRound, Delete, Star, StarFilled, Search } from '@element-plus/icons-vue';
 import ConversationStore from "@/store/Conversation";
 import { storeToRefs } from 'pinia';
+import { ElMessage, ElMessageBox } from 'element-plus';
 
 export interface Conversation {
   id: string;
@@ -40,30 +41,33 @@ const createConversation = async () => {
     });
     if (response.ok) {
       const newConv = await response.json();
-      conversations.value.unshift(newConv);
       conversationId.value = newConv.id;
+      fetchConversations();
     }
   } catch (error) {
     console.error('Failed to create conversation:', error);
   }
 };
 
-const deleteConversation = async (id: string, event: Event) => {
-  event.stopPropagation();
-  if (!confirm('确定删除此对话？')) return;
-  
-  try {
-    const response = await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
-    if (response.ok) {
-      conversations.value = conversations.value.filter(c => c.id !== id);
+const deleteConversation = async (id: string) => {
+  const action: any = await ElMessageBox.confirm('确定删除该对话吗？', '删除对话', {
+    type: 'warning'
+  });
+  if (action === 'confirm') {
+    try {
+      const response = await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        conversations.value = conversations.value.filter(c => c.id !== id);
+        ElMessage.success('删除成功');
+      }
+    } catch (error) {
+      console.error('Failed to delete conversation:', error);
+      ElMessage.success('删除失败');
     }
-  } catch (error) {
-    console.error('Failed to delete conversation:', error);
   }
 };
 
-const togglePin = async (conv: Conversation, event: Event) => {
-  event.stopPropagation();
+const togglePin = async (conv: Conversation) => {
   try {
     const response = await fetch(`/api/conversations/${conv.id}/pinned`, {
       method: 'PUT',
@@ -106,9 +110,9 @@ onUnmounted(() => {
 <template>
   <div class="sidebar">
     <div class="sidebar-header">
-      <button class="new-chat-btn" @click="createConversation">
+      <el-button class="new-chat-btn" type="primary" @click="createConversation">
         <el-icon><Plus /></el-icon> 新对话
-      </button>
+      </el-button>
     </div>
     
     <div class="sidebar-content">
@@ -122,15 +126,11 @@ onUnmounted(() => {
       </div>
 
       <el-scrollbar class="conversation-list">
-        <div v-if="loading" class="loading-state">
-          <el-icon class="is-loading"><Loading /></el-icon>
-        </div>
-        
-        <div v-else-if="conversations.length === 0" class="empty-state">
+        <div v-if="conversations.length === 0" class="empty-state">
           <p>暂无对话</p>
         </div>
         
-        <div v-else>
+        <div v-else v-loading="loading">
           <!-- 置顶对话 -->
           <div class="section-title" v-if="filteredConversations().some(c => c.pinned)">置顶对话</div>
           <template v-for="conv in filteredConversations().filter(c => c.pinned)" :key="conv.id">
@@ -145,8 +145,8 @@ onUnmounted(() => {
                 <div class="conv-time">{{ formatTime(conv.updatedAt) }}</div>
               </div>
               <div class="conv-actions">
-                <el-icon @click="togglePin(conv, $event)"><StarFilled /></el-icon>
-                <el-icon @click="deleteConversation(conv.id, $event)"><Delete /></el-icon>
+                <el-icon @click.stop="togglePin(conv)"><StarFilled /></el-icon>
+                <el-icon @click.stop="deleteConversation(conv.id)"><Delete /></el-icon>
               </div>
             </div>
           </template>
@@ -164,8 +164,8 @@ onUnmounted(() => {
                 <div class="conv-time">{{ formatTime(conv.updatedAt) }}</div>
               </div>
               <div class="conv-actions">
-                <el-icon @click="togglePin(conv, $event)"><Star /></el-icon>
-                <el-icon @click="deleteConversation(conv.id, $event)"><Delete /></el-icon>
+                <el-icon @click.stop="togglePin(conv)"><Star /></el-icon>
+                <el-icon @click.stop="deleteConversation(conv.id)"><Delete /></el-icon>
               </div>
             </div>
           </template>
@@ -193,18 +193,7 @@ onUnmounted(() => {
 .new-chat-btn {
   width: 100%;
   padding: 10px 16px;
-  background-color: var(--el-color-primary); /* Use primary color */
-  color: white;
-  border: none;
-  border-radius: 8px;
   font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
 }
 
 .new-chat-btn:hover {

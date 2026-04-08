@@ -384,7 +384,7 @@ onMounted(() => {
                 </div>
                 <div v-if="server.command">
                   <span>命令</span>
-                  <code>{{ server.command }}</code>
+                  <code :title="server.command">{{ server.command }}</code>
                 </div>
                 <div v-if="server.url">
                   <span>URL</span>
@@ -690,6 +690,12 @@ onMounted(() => {
             color: var(--text-primary);
             word-break: break-word;
             line-height: 1.5;
+          }
+
+          code {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
           }
         }
       }

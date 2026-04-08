@@ -69,7 +69,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, ref, useTemplateRef } from 'vue';
+import { computed, ref, useTemplateRef, watch } from 'vue';
 import { Connection } from './Index.vue';
 import { ElInput, ElMessage, ElMessageBox, TableInstance } from 'element-plus';
 import { parseReponse, parseWebshellListItems } from "./Parser";
@@ -87,6 +87,11 @@ interface File {
 const { connection } = defineProps<{
   connection: Connection
 }>();
+
+watch(() => connection, () => {
+  fileList.value = [];
+});
+
 const currentPath = ref('');
 const filterKey = ref('');
 const commands = ref<Record<string, string>[]>([

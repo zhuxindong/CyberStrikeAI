@@ -118,6 +118,11 @@ const deleteSkill = async (name: string) => {
   padding: 20px;
   height: 100%;
 
+  >.actions {
+    display: flex;
+    flex-direction: row-reverse;
+  }
+
   .skills-controls {
     margin: 20px 0;
   }

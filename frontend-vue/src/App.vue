@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { 
-  Setting, 
+import {
+  Setting,
   // Monitor, 
-  User, 
-  VideoPlay, 
-  ChatDotRound, 
+  User,
+  VideoPlay,
+  ChatDotRound,
   Warning,
   Collection,
   Connection,
@@ -14,6 +14,7 @@ import Sidebar from './components/Sidebar.vue';
 import { useRoute } from 'vue-router';
 
 const route = useRoute();
+const APIHref = `${location.protocol}//${location.hostname}:8080/swagger-ui.html?token=CyberStrikeAI`;
 </script>
 
 <template>
@@ -24,23 +25,31 @@ const route = useRoute();
         <!-- <img src="/logo.svg" alt="CS" v-if="false" /> -->
         <span class="logo-text">CS</span>
       </div>
-      
+
       <el-menu mode="vertical" router :default-active="route.path">
         <el-menu-item index="/dashboard">
-          <el-icon><Stopwatch /></el-icon>
+          <el-icon>
+            <Stopwatch />
+          </el-icon>
           <span class="nav-label">仪表盘</span>
         </el-menu-item>
         <el-menu-item index="/chat">
-          <el-icon><ChatDotRound /></el-icon>
+          <el-icon>
+            <ChatDotRound />
+          </el-icon>
           <span class="nav-label">对话</span>
         </el-menu-item>
         <el-menu-item index="/task">
-          <el-icon><VideoPlay /></el-icon>
+          <el-icon>
+            <VideoPlay />
+          </el-icon>
           <span class="nav-label">任务</span>
         </el-menu-item>
         <el-sub-menu index="knowledge">
           <template #title>
-            <el-icon><Collection /></el-icon>
+            <el-icon>
+              <Collection />
+            </el-icon>
             <span class="nav-label">知识</span>
           </template>
           <el-menu-item-group>
@@ -54,7 +63,9 @@ const route = useRoute();
         </el-sub-menu>
         <el-sub-menu index="skills">
           <template #title>
-            <el-icon><Key /></el-icon>
+            <el-icon>
+              <Key />
+            </el-icon>
             <span class="nav-label">Skills</span>
           </template>
           <el-menu-item-group>
@@ -67,20 +78,28 @@ const route = useRoute();
           </el-menu-item-group>
         </el-sub-menu>
         <el-menu-item index="/role">
-          <el-icon><User /></el-icon>
+          <el-icon>
+            <User />
+          </el-icon>
           <span class="nav-label">角色</span>
         </el-menu-item>
         <el-menu-item index="/vuln">
-          <el-icon><Warning /></el-icon>
+          <el-icon>
+            <Warning />
+          </el-icon>
           <span class="nav-label">漏洞</span>
         </el-menu-item>
         <el-menu-item index="/webshell">
-          <el-icon><FullScreen /></el-icon>
+          <el-icon>
+            <FullScreen />
+          </el-icon>
           <span class="nav-label">Webshell管理</span>
         </el-menu-item>
         <el-sub-menu index="mcp">
           <template #title>
-            <el-icon><Connection /></el-icon>
+            <el-icon>
+              <Connection />
+            </el-icon>
             <span class="nav-label">MCP</span>
           </template>
           <el-menu-item-group>
@@ -93,7 +112,9 @@ const route = useRoute();
           </el-menu-item-group>
         </el-sub-menu>
         <el-menu-item index="/config">
-          <el-icon><Setting /></el-icon>
+          <el-icon>
+            <Setting />
+          </el-icon>
           <span class="nav-label">设置</span>
         </el-menu-item>
       </el-menu>
@@ -103,7 +124,7 @@ const route = useRoute();
     <aside class="app-sidebar" v-if="route.name === 'CyberStrikeAI'">
       <Sidebar />
     </aside>
-    
+
     <!-- Main Content Area -->
     <div class="app-main">
       <!-- Header -->
@@ -111,8 +132,13 @@ const route = useRoute();
         <div class="header-left">
           <h2>{{ route.name }}</h2>
         </div>
+        <div>
+          <el-link :href="APIHref" target="_blank" underline="never">
+            <el-button>API文档</el-button>
+          </el-link>
+        </div>
       </header>
-      
+
       <!-- Content -->
       <main class="app-content">
         <div class="content-wrapper">
@@ -155,7 +181,7 @@ const route = useRoute();
 
 .nav-logo {
   width: 40px;
-  height: 40px;
+  min-height: 40px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-radius: 8px;
   display: flex;
@@ -181,7 +207,8 @@ const route = useRoute();
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #606266; /* var(--el-text-color-regular) */
+  color: #606266;
+  /* var(--el-text-color-regular) */
   cursor: pointer;
   padding: 8px 0;
   transition: all 0.2s;
@@ -308,6 +335,7 @@ const route = useRoute();
   .app-sidebar {
     width: 220px;
   }
+
   .tools-area {
     width: 280px;
   }
@@ -321,10 +349,11 @@ const route = useRoute();
     transform: translateX(-100%);
     transition: transform 0.3s;
   }
+
   .app-sidebar.show {
     transform: translateX(0);
   }
+
   /* Need a toggle button for mobile if we support it */
 }
 </style>
-
