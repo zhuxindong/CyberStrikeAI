@@ -47,7 +47,7 @@
 </template>
 
 <script lang="ts" setup>
-import { onMounted, reactive, ref, useTemplateRef } from 'vue';
+import { onMounted, reactive, ref, useTemplateRef, watch } from 'vue';
 import { Conversation } from '../Sidebar.vue';
 import { TimelineItem, Message } from '../ChatWindow.vue';
 import { dayjs, ElMessage, ElMessageBox } from 'element-plus';
@@ -57,6 +57,10 @@ import { Connection } from './Index.vue';
 const { connection } = defineProps<{
   connection: Connection
 }>();
+
+watch(() => connection, () => {
+  messages.splice(0);
+});
 
 const conversations = ref<Conversation[]>([]);
 const messages = reactive<Message[]>([]);

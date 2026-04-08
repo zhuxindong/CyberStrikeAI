@@ -4,8 +4,8 @@ import { getTitleByType, streamChat, scrollToBottom } from '../utils/chatService
 import { escapeHtml } from '../utils/escape';
 import MarkdownIt from 'markdown-it';
 import { dayjs, ElMessage } from 'element-plus';
-import 'element-plus/theme-chalk/display.css';
-import { Monitor, Loading, User, ArrowDown, Cpu, MagicStick, Box, Aim, ZoomIn, View, Cloudy, Check } from '@element-plus/icons-vue';
+// import 'element-plus/theme-chalk/display.css';
+import { Loading, User, ArrowDown, Cpu, MagicStick, Box, Aim, ZoomIn, View, Cloudy, Check } from '@element-plus/icons-vue';
 import AttackChainView from './AttackChainView.vue';
 import McpCallDialog from "./McpCallDialog.vue";
 
@@ -62,7 +62,8 @@ const activeTasks = ref<ActiveTaskMessage[]>([]);
 const loading = ref(false);
 const currentTaskId = ref<string | undefined>(undefined);
 const progressTitle = ref<string>('');
-const messageContainer = useTemplateRef<HTMLElement>('messageContainer');
+const messageArea = useTemplateRef<HTMLElement>('messageArea');
+const messageContainers = useTemplateRef<HTMLElement[]>('messageContainer');
 
 const showAttackChain = ref(false);
 const mcpCallDialogVisible = ref<boolean>(false);
@@ -204,8 +205,8 @@ onMounted(() => {
   fetchRoles();
 });
 
-const scroll = () => {
-  scrollToBottom(messageContainer.value);
+const scroll = (ele?: HTMLElement) => {
+  scrollToBottom(messageArea.value, ele);
 };
 
 // 生成调用工具信息
@@ -384,7 +385,12 @@ const stopTask = async (taskId?: string) => {
 // 展开/收起调用序列
 const toggleTimeline = (message: Message) => {
   message.expanded = !message.expanded;
-  scroll();
+  if (message.expanded) {
+    const i = messages.findIndex(m => m.id === message.id);
+    if (i !== -1 && messageContainers.value) {
+      scroll(messageContainers.value[i]);
+    }
+  }
 };
 
 const showMcpCall = (messageId: string | undefined, id: string) => {
@@ -440,7 +446,7 @@ const renderMarkdown = (text: string | undefined) => {
         </div>
       </el-scrollbar>
     </div>
-    <div class="messages-area" ref="messageContainer">
+    <div class="messages-area" ref="messageArea">
       <!-- <div v-if="!currentConversationId" class="empty-state">
         <el-icon :size="64" class="icon"><Monitor /></el-icon>
         <h3>CyberStrike AI Ready</h3>
@@ -448,7 +454,7 @@ const renderMarkdown = (text: string | undefined) => {
       </div> -->
       
       <div v-for="(msg, index) in messages" :key="index" :class="['message-row', msg.role]">
-        <div class="message-container">
+        <div ref="messageContainer" class="message-container">
           <div class="message-bubble">
             <div class="message-header">
               <span class="role-badge">
@@ -518,7 +524,7 @@ const renderMarkdown = (text: string | undefined) => {
 
     <div class="input-area">
       <!-- Role Selector -->
-      <div class="role-selector-wrapper" v-if="!loading">
+      <div v-if="!loading">
         <el-popover
           :visible="rolePopoverVisible"
           @update:visible="(val: boolean) => rolePopoverVisible = val"
@@ -569,14 +575,14 @@ const renderMarkdown = (text: string | undefined) => {
 
       <el-input
         v-model="input"
-        :autosize="{ minRows: 2, maxRows: 6 }"
+        :autosize="{ minRows: 1, maxRows: 6 }"
         type="textarea"
         placeholder="输入命令 (例如: 扫描 localhost)"
         @keydown.enter.exact.prevent="sendMessage"
         :disabled="loading"
         class="chat-input"
       />
-      <div class="button-group">
+      <div>
         <el-button type="primary" :loading="loading" @click="sendMessage" :disabled="loading">发送</el-button>
         <el-button v-if="loading" type="danger" @click="stopTask()">停止</el-button>
         <el-button 
@@ -1020,12 +1026,6 @@ const renderMarkdown = (text: string | undefined) => {
   background-color: #f8f9fa; /* added background */
 }
 
-/* Role Selector Styles */
-.role-selector-wrapper {
-  flex-shrink: 0;
-  margin-bottom: 4px; /* Align with textarea bottom */
-}
-
 .role-selector-btn {
   display: flex;
   align-items: center;
@@ -1058,12 +1058,6 @@ const renderMarkdown = (text: string | undefined) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.button-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 
 .typing-indicator {

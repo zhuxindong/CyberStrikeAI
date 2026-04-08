@@ -16,6 +16,10 @@
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
   --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.15);
+
+  --el-color-primary: #0066ff;
+  --el-color-warning: #ffc107;
+  --el-color-danger: #dc3545;
 }
 
 h1,
@@ -66,8 +70,7 @@ body {
   padding: 7px 16px;
   border: none;
   border-radius: 6px;
-  font-size: 0.875rem;
-  cursor: pointer;
+  // font-size: 0.875rem;
   transition: all 0.2s;
   background-color: var(--bg-tertiary);
 
@@ -76,21 +79,45 @@ body {
   }
 
   &.el-button--primary {
-    background: var(--accent-color);
-    color: white;
+    &:not(.is-link) {
+      background-color: var(--accent-color);
+      color: white;
 
-    &:hover {
-      background: var(--accent-hover);
-      box-shadow: var(--shadow-sm);
+      &:hover {
+        background: var(--accent-hover);
+        box-shadow: var(--shadow-sm);
+      }
+    }
+  }
+
+  &.el-button--warning {
+    &:not(.is-link) {
+      background-color: var(--el-color-warning);
+      color: white;
+
+      &:hover {
+        background-color: #b38809;
+      }
+    }
+  }
+
+  &.el-button--danger {
+    &:not(.is-link) {
+      background-color: var(--el-color-danger);
+      color: white;
+
+      &:hover {
+        background-color: #a22835;
+      }
     }
   }
 }
 
-.el-input {
-  .el-input__wrapper {
-    &.is-focus {
-      border-color: var(--accent-color);
-      box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
-    }
-  }
-}
+// .el-input {
+//   .el-input__wrapper {
+//     &.is-focus {
+//       border-color: var(--accent-color);
+//       box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
+//     }
+//   }
+// }
