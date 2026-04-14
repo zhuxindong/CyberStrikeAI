@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ref, onMounted, useTemplateRef, nextTick } from 'vue';
+import { ElMessage, ElMessageBox, FormContext, FormRules } from 'element-plus';
 import { Plus, Edit, Delete } from '@element-plus/icons-vue';
 
 interface Role {
@@ -17,6 +17,18 @@ const form = ref<Partial<Role>>({
   name: '',
   systemPrompt: ''
 });
+const rules = ref<FormRules>({
+  name: {
+    required: true,
+    message: '角色必填'
+  },
+  systemPrompt: {
+    required: true,
+    message: '系统提示必填'
+  }
+});
+
+const formRef = useTemplateRef<FormContext>('formRef');
 
 const fetchRoles = async () => {
   try {
@@ -35,10 +47,11 @@ const handleAdd = () => {
   dialogVisible.value = true;
 };
 
-const handleEdit = (role: Role) => {
+const handleEdit = async (role: Role) => {
   isEditing.value = true;
-  form.value = { ...role };
   dialogVisible.value = true;
+  await nextTick();
+  form.value = { ...role };
 };
 
 const handleDelete = async (role: Role) => {
@@ -57,7 +70,15 @@ const handleDelete = async (role: Role) => {
   }
 };
 
+const onClose = () => {
+  formRef.value?.resetFields();
+};
+
 const handleSubmit = async () => {
+  const valid = await formRef.value?.validateField();
+  if (!valid) {
+    return;
+  }
   try {
     const url = isEditing.value ? `/api/roles/${form.value.id}` : '/api/roles';
     const method = isEditing.value ? 'PUT' : 'POST';
@@ -76,6 +97,7 @@ const handleSubmit = async () => {
       ElMessage.error('操作失败');
     }
   } catch (error) {
+    console.log(error);
     ElMessage.error('网络错误');
   }
 };
@@ -113,12 +135,13 @@ onMounted(fetchRoles);
       v-model="dialogVisible"
       :title="isEditing ? '编辑角色' : '新建角色'"
       width="500px"
+      @close="onClose"
     >
-      <el-form :model="form" label-width="80px">
-        <el-form-item label="角色名称">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
+        <el-form-item label="角色名称" prop="name">
           <el-input v-model="form.name" placeholder="例如: 代码审计专家" />
         </el-form-item>
-        <el-form-item label="系统提示">
+        <el-form-item label="系统提示" prop="systemPrompt">
           <el-input 
             v-model="form.systemPrompt" 
             type="textarea" 
@@ -188,6 +211,7 @@ onMounted(fetchRoles);
   font-size: 0.9rem;
   line-height: 1.5;
   display: -webkit-box;
+  line-clamp: 5;
   -webkit-line-clamp: 5;
   -webkit-box-orient: vertical;
   overflow: hidden;

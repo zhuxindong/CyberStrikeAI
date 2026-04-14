@@ -13,8 +13,7 @@
         </el-button>
       </div>
       <div class="webshell-list">
-        <div v-for="conn in connections" :class="{ 'active': conn === activeConnection }"
-          @click="selectConn(conn)">
+        <div v-for="conn in connections" :class="{ 'active': conn === activeConnection }" @click="selectConn(conn)">
           <div class="webshell-item-remark">{{ conn.remark }}</div>
           <div class="webshell-item-url">{{ conn.url }}</div>
           <div class="webshell-item-actions">

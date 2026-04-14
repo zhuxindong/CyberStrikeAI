@@ -688,7 +688,7 @@ const renderMarkdown = (text: string | undefined) => {
   overflow-y: auto;
   padding: 20px;
   scroll-behavior: smooth;
-  background-color: #f5f7fa;
+  // background-color: #f5f7fa;
 }
 
 .empty-state {
@@ -732,11 +732,9 @@ const renderMarkdown = (text: string | undefined) => {
   &.assistant {
     .message-bubble {
       min-width: 500px;
-      background: var(--bg-primary);
+      background: var(--bg-tertiary);
       color: var(--text-primary);
       border: 1px solid var(--border-color);
-      border-bottom-left-radius: 8px;
-      border-top-left-radius: 2px;
     }
   }
 
@@ -1023,7 +1021,7 @@ const renderMarkdown = (text: string | undefined) => {
   display: flex;
   gap: 10px;
   align-items: flex-end; /* changed to align bottom */
-  background-color: #f8f9fa; /* added background */
+  // background-color: #f8f9fa; /* added background */
 }
 
 .role-selector-btn {

@@ -280,7 +280,6 @@ const showDetail = (row: TableItem) => {
     content,
     parsedContent
   };
-  console.log(mcpCallDetail.value);
 
   dialogVisible.value = true;
 };
@@ -300,7 +299,6 @@ const deleteRow = (row: TableItem) => {
       }
     }
   })
-
 };
 </script>
 

@@ -20,6 +20,7 @@
   --el-color-primary: #0066ff;
   --el-color-warning: #ffc107;
   --el-color-danger: #dc3545;
+  --el-color-success: #28a745;
 }
 
 h1,
@@ -70,7 +71,6 @@ body {
   padding: 7px 16px;
   border: none;
   border-radius: 6px;
-  // font-size: 0.875rem;
   transition: all 0.2s;
   background-color: var(--bg-tertiary);
 
@@ -79,7 +79,7 @@ body {
   }
 
   &.el-button--primary {
-    &:not(.is-link) {
+    &:not(.is-link, .is-text) {
       background-color: var(--accent-color);
       color: white;
 
@@ -91,7 +91,7 @@ body {
   }
 
   &.el-button--warning {
-    &:not(.is-link) {
+    &:not(.is-link, .is-text) {
       background-color: var(--el-color-warning);
       color: white;
 
@@ -102,7 +102,7 @@ body {
   }
 
   &.el-button--danger {
-    &:not(.is-link) {
+    &:not(.is-link, .is-text) {
       background-color: var(--el-color-danger);
       color: white;
 
@@ -112,12 +112,3 @@ body {
     }
   }
 }
-
-// .el-input {
-//   .el-input__wrapper {
-//     &.is-focus {
-//       border-color: var(--accent-color);
-//       box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
-//     }
-//   }
-// }

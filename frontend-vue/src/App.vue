@@ -22,8 +22,7 @@ const APIHref = `${location.protocol}//${location.hostname}:8080/swagger-ui.html
     <!-- Primary Navigation Rail -->
     <nav class="nav-rail">
       <div class="nav-logo">
-        <!-- <img src="/logo.svg" alt="CS" v-if="false" /> -->
-        <span class="logo-text">CS</span>
+         <img src="@/assets/logo.png">
       </div>
 
       <el-menu mode="vertical" router :default-active="route.path">
@@ -180,9 +179,7 @@ const APIHref = `${location.protocol}//${location.hostname}:8080/swagger-ui.html
 }
 
 .nav-logo {
-  width: 40px;
-  min-height: 40px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  width: 66px;
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -191,7 +188,10 @@ const APIHref = `${location.protocol}//${location.hostname}:8080/swagger-ui.html
   color: white;
   font-weight: bold;
   font-size: 18px;
-  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.4);
+
+  >img {
+    width: 100%;
+  }
 }
 
 .nav-items {
