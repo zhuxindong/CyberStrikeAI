@@ -14,7 +14,7 @@ import Sidebar from './components/Sidebar.vue';
 import { useRoute } from 'vue-router';
 
 const route = useRoute();
-const APIHref = `${location.protocol}//${location.hostname}:8080/swagger-ui.html?token=CyberStrikeAI`;
+const APIHref = `${location.protocol}//${location.hostname}:30001/swagger-ui.html?token=CyberStrikeAI`;
 </script>
 
 <template>
@@ -129,7 +129,7 @@ const APIHref = `${location.protocol}//${location.hostname}:8080/swagger-ui.html
       <!-- Header -->
       <header class="app-header">
         <div class="header-left">
-          <h2>{{ route.name }}</h2>
+          <h2>{{ route.name !== 'CyberStrikeAI' ? route.name : '' }}</h2>
         </div>
         <div>
           <el-link :href="APIHref" target="_blank" underline="never">

@@ -613,7 +613,7 @@ const renderMarkdown = (text: string | undefined) => {
   display: flex;
   flex-direction: column;
   height: calc(100vh - 94px);
-  max-width: 1200px;
+  // max-width: 1200px;
   border: 1px solid var(--el-border-color);
   border-radius: 8px;
   background: var(--el-bg-color);
