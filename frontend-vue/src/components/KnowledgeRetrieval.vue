@@ -303,7 +303,7 @@ onMounted(() => {
     display: flex;
     flex-wrap: nowrap;
     justify-content: space-between;
-    align-items: end;
+    align-items: flex-end;
     background: white;
     padding: 16px;
     border-radius: 8px;

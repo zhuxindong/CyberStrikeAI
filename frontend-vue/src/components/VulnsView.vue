@@ -548,7 +548,7 @@ onMounted(() => {
   padding: 12px 16px;
 
   .filters {
-    align-items: end;
+    align-items: flex-end;
 
     :deep(.el-input__wrapper) {
       width: 200px;
