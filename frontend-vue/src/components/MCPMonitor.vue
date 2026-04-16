@@ -183,7 +183,7 @@ const getStats = async () => {
       totalSuccess: 0,
       totalFail: 0,
       successRate: 0,
-      lastCallTime: '1900',
+      lastCallTime: '',
       lastUpdatedText: dayjs().format('YYYY-MM-DD hh:mm:ss')
     };
     const data = Object.values(result);
@@ -198,7 +198,7 @@ const getStats = async () => {
         stats.value.lastCallTime = item.lastCallTime;
       }
     });
-    stats.value.successRate = (stats.value.totalSuccess / stats.value.total * 100).toFixed(0);
+    stats.value.successRate = stats.value.total === 0 ? 0 : (stats.value.totalSuccess / stats.value.total * 100).toFixed(0);
   }
 };
 
@@ -243,24 +243,23 @@ const onSelect = () => {
 };
 
 const batchDelete = async () => {
-  ElMessageBox.confirm('确定批量删除吗', '批量删除', {
-    type: 'error',
-    callback: async (action: string) => {
-      if (action === 'confirm') {
-        const ids: string[] = selectedRows.value.map(row => {
-          return `id=${row.id}`;
-        });
-        const res = await fetch(`/api/mcp/delete?${ids.join('&')}`);
-        if (res.ok) {
-          ElMessage.success('删除成功');
-          selectedRows.value = [];
-          getTableData();
-        } else {
-          ElMessage.error('删除失败');
-        }
-      }
+  const action = await ElMessageBox.confirm('确定批量删除吗', '批量删除', {
+    type: 'error'
+  });
+  if (action === 'confirm') {
+    const ids: string[] = selectedRows.value.map(row => {
+      return `id=${row.id}`;
+    });
+    const res = await fetch(`/api/mcp/delete?${ids.join('&')}`);
+    if (res.ok) {
+      ElMessage.success('删除成功');
+      selectedRows.value = [];
+      getStats();
+      getTableData();
+    } else {
+      ElMessage.error('删除失败');
     }
-  })
+  }
 };
 
 const showDetail = (row: TableItem) => {
@@ -284,21 +283,24 @@ const showDetail = (row: TableItem) => {
   dialogVisible.value = true;
 };
 
-const deleteRow = (row: TableItem) => {
-  ElMessageBox.confirm("确定删除吗", "删除工具执行记录", {
-    type: 'error',
-    callback: async (action: string) => {
-      if (action === 'confirm') {
-        const res = await fetch(`/api/mcp/delete?id=${row.id}`);
-        if (res.ok) {
-          ElMessage.success('删除成功');
-          getTableData();
-        } else {
-          ElMessage.error('删除失败');
-        }
+const deleteRow = async (row: TableItem) => {
+  const action = await ElMessageBox.confirm("确定删除吗", "删除工具执行记录", {
+    type: 'error'
+  });
+  if (action === 'confirm') {
+    const res = await fetch(`/api/mcp/delete?id=${row.id}`);
+    if (res.ok) {
+      ElMessage.success('删除成功');
+      getStats();
+      getTableData();
+      const i = selectedRows.value.findIndex(r => r.id === row.id);
+      if (i !== -1) {
+        selectedRows.value.splice(i, 1);
       }
+    } else {
+      ElMessage.error('删除失败');
     }
-  })
+  }
 };
 </script>
 
