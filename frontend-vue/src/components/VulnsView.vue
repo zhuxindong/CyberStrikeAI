@@ -292,11 +292,9 @@ onMounted(() => {
 
 <template>
   <div class="vulns-view">
-    <div class="actions">
-      <div>
-        <el-button :icon="Refresh" @click="loadVulnerabilities(false)">刷新</el-button>
-        <el-button type="primary" :icon="Plus" @click="handleAdd">添加漏洞</el-button>
-      </div>
+    <div>
+      <el-button type="primary" :icon="Plus" @click="handleAdd">添加漏洞</el-button>
+      <el-button :icon="Refresh" @click="loadVulnerabilities(false)">刷新</el-button>
     </div>
 
     <!-- 统计卡片 -->
@@ -498,11 +496,6 @@ onMounted(() => {
   padding: 16px;
   gap: 16px;
   overflow: auto;
-}
-
-.actions {
-  display: flex;
-  flex-direction: row-reverse;
 }
 
 .stats-row {

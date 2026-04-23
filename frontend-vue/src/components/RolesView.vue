@@ -170,9 +170,8 @@ onMounted(fetchRoles);
 
 .page-header {
   display: flex;
-  flex-direction: row-reverse;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .page-header h2 {

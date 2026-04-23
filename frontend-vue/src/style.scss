@@ -21,13 +21,16 @@
   --el-color-warning: #ffc107;
   --el-color-danger: #dc3545;
   --el-color-success: #28a745;
+
+  --el-fill-color-light: hsl(240, 20%, 99%);
 }
 
 h1,
 h2,
 h3,
 h4,
-h5 {
+h5,
+p {
   margin: 0;
 }
 
@@ -52,18 +55,6 @@ body {
 .el-form--inline {
   .el-form-item {
     margin-right: 12px;
-  }
-}
-
-.form-hint {
-  display: block;
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-  margin-top: 4px;
-  line-height: 1.4;
-
-  >pre {
-    white-space: pre-line;
   }
 }
 
@@ -111,4 +102,29 @@ body {
       }
     }
   }
+}
+
+.toolbar {
+  flex-wrap: nowrap !important;
+  align-items: end;
+  padding: 16px;
+  border-radius: 8px;
+  background-color: hsl(210 15% 99% / 1);
+  box-shadow: 0 0px 3px rgb(0 0 0 / 15%);
+}
+
+.form-hint {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  line-height: 1.4;
+
+  >pre {
+    white-space: pre-line;
+  }
+}
+
+.header-btns {
+  margin-bottom: 12px;
 }
