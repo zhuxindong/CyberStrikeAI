@@ -269,7 +269,7 @@ const sendMessage = async () => {
           progressTitle.value = '🔍 渗透测试进行中...';
           loadActiveTasks();
         }
-      } else if (['iteration', 'thinking', 'tool_calls_detected'].includes(type)) {
+      } else if (['iteration', 'thinking', 'tool_calls_detected', 'response'].includes(type)) {
         lastMessage.timelineItems.push({
           id,
           type,

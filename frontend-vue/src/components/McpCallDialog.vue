@@ -69,14 +69,26 @@ watch(() => props.dialogVisible, val => {
 }, { immediate: true });
 
 const copyText = (text?: string) => {
-  navigator.clipboard.writeText(text || '')
-    .then(() => {
-      ElMessage.success('复制成功');
-    })
-    .catch((err) => {
-      console.log(err);
-      ElMessage.error('复制失败');
-    });
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text || '')
+      .then(() => {
+        ElMessage.success('复制成功');
+      })
+      .catch((err) => {
+        console.log(err);
+        ElMessage.error('复制失败');
+      });
+  } else {
+    // 创建临时输入框
+    const textarea = document.createElement('textarea');
+    textarea.value = text || '';
+    document.body.appendChild(textarea);
+    // 选中并复制
+    textarea.select();
+    document.execCommand('copy');
+    // 移除临时元素
+    document.body.removeChild(textarea);
+  }
 };
 </script>
 

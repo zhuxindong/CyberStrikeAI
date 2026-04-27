@@ -151,7 +151,7 @@ const initTerm = () => {
         webshellLineBuffer = '';
         webshellHistoryIndex = -1;
       }
-      // Ctrl+L 粘贴
+      // Ctrl+V 粘贴
       if (key === '\x16') {
         const text = await navigator.clipboard.readText();
         term.paste(text);
