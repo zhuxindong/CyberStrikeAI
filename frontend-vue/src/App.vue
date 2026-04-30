@@ -94,6 +94,12 @@ const APIHref = `${location.protocol}//${location.hostname}:30001/swagger-ui.htm
           </el-icon>
           <span class="nav-label">Webshell管理</span>
         </el-menu-item>
+        <el-menu-item index="/chat-files">
+          <el-icon>
+            <Folder />
+          </el-icon>
+          <span class="nav-label">文件管理</span>
+        </el-menu-item>
         <el-sub-menu index="mcp">
           <template #title>
             <el-icon>
@@ -323,6 +329,11 @@ const APIHref = `${location.protocol}//${location.hostname}:30001/swagger-ui.htm
   overflow: hidden;
   display: flex;
   flex-direction: column;
+
+  >div:not(.chat-container) {
+    padding: 20px;
+    overflow: auto;
+  }
 }
 
 .empty-placeholder {
