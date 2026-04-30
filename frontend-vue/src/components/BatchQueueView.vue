@@ -245,7 +245,7 @@ onMounted(() => {
 
 <template>
   <div class="batch-view">
-    <div class="task-actions">
+    <div>
       <el-button type="primary" @click="handleCreate">
         <el-icon>
           <Plus />
@@ -341,19 +341,15 @@ onMounted(() => {
   overflow: auto;
 }
 
-.task-actions {
-  display: flex;
-  flex-direction: row-reverse;
-}
-
 .task-filters {
   display: flex;
   gap: 16px;
   align-items: flex-end;
   margin-bottom: 16px;
+  margin-top: 12px;
 
   .el-form {
-    align-items: end;
+    align-items: flex-end;
   }
 
   .el-select {

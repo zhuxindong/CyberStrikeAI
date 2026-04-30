@@ -65,63 +65,63 @@
       </div>
     </div>
     <el-empty v-else description="暂无检索记录" />
-  </div>
-  <el-dialog v-model="dialogVisible" title="检索详情">
-    <div class="retrieval-detail-container">
-      <div>
-        <h3 class="retrieval-detail-title">查询信息</h3>
-        <div class="retrieval-detail-block">
-          <div>
-            <div class="retrieval-detail-label">查询内容</div>
-            <h3>{{ logInfo.query }}</h3>
-          </div>
-        </div>
-      </div>
-      <div>
-        <h3 class="retrieval-detail-title">检索信息</h3>
-        <div class="retrieval-detail-block">
-          <div>
-            <div class="retrieval-detail-label">风险类型</div>
-            <h3>{{ logInfo.riskType }}</h3>
-          </div>
-          <div>
-            <div class="retrieval-detail-label">检索时间</div>
-            <h3>{{ logInfo.timeDiff }}小时前</h3>
-          </div>
-          <div>
-            <div class="retrieval-detail-label">检索结果</div>
-            <h3>{{ logInfo.result }}</h3>
-          </div>
-        </div>
-      </div>
-      <div>
-        <h3 class="retrieval-detail-title">关联信息</h3>
-        <div class="retrieval-detail-block">
-          <div>
-            <div class="retrieval-detail-label">对话ID</div>
-            <h3>{{ logInfo.conversationId }}</h3>
-          </div>
-          <div>
-            <div class="retrieval-detail-label">消息ID</div>
-            <h3>{{ logInfo.messageId }}</h3>
-          </div>
-        </div>
-      </div>
-      <div>
-        <h3 class="retrieval-detail-title">检索到的知识项 ({{ logInfo.resolvedItems?.length }})</h3>
+    <el-dialog v-model="dialogVisible" title="检索详情">
+      <div class="retrieval-detail-container">
         <div>
-          <div v-for="(item, i) in logInfo.resolvedItems" class="retrieval-detail-item-card">
-            <div class="retrieval-detail-item-header">
-              <h4>{{ i + 1 }}. {{ item.title }}</h4>
-              <span>{{ item.category }}</span>
+          <h3 class="retrieval-detail-title">查询信息</h3>
+          <div class="retrieval-detail-block">
+            <div>
+              <div class="retrieval-detail-label">查询内容</div>
+              <h3>{{ logInfo.query }}</h3>
             </div>
-            <div v-if="item.filePath" class="retrieval-detail-item-path">📁 {{ item.filePath }}</div>
-            <div class="retrieval-detail-item-preview"> {{ item.preview }}</div>
+          </div>
+        </div>
+        <div>
+          <h3 class="retrieval-detail-title">检索信息</h3>
+          <div class="retrieval-detail-block">
+            <div>
+              <div class="retrieval-detail-label">风险类型</div>
+              <h3>{{ logInfo.riskType }}</h3>
+            </div>
+            <div>
+              <div class="retrieval-detail-label">检索时间</div>
+              <h3>{{ logInfo.timeDiff }}小时前</h3>
+            </div>
+            <div>
+              <div class="retrieval-detail-label">检索结果</div>
+              <h3>{{ logInfo.result }}</h3>
+            </div>
+          </div>
+        </div>
+        <div>
+          <h3 class="retrieval-detail-title">关联信息</h3>
+          <div class="retrieval-detail-block">
+            <div>
+              <div class="retrieval-detail-label">对话ID</div>
+              <h3>{{ logInfo.conversationId }}</h3>
+            </div>
+            <div>
+              <div class="retrieval-detail-label">消息ID</div>
+              <h3>{{ logInfo.messageId }}</h3>
+            </div>
+          </div>
+        </div>
+        <div>
+          <h3 class="retrieval-detail-title">检索到的知识项 ({{ logInfo.resolvedItems?.length }})</h3>
+          <div>
+            <div v-for="(item, i) in logInfo.resolvedItems" class="retrieval-detail-item-card">
+              <div class="retrieval-detail-item-header">
+                <h4>{{ i + 1 }}. {{ item.title }}</h4>
+                <span>{{ item.category }}</span>
+              </div>
+              <div v-if="item.filePath" class="retrieval-detail-item-path">📁 {{ item.filePath }}</div>
+              <div class="retrieval-detail-item-preview"> {{ item.preview }}</div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  </el-dialog>
+    </el-dialog>
+  </div>
 </template>
 
 <script lang="ts" setup>
@@ -249,17 +249,19 @@ const view = async (log: RetrievalLog) => {
 };
 
 const deleteLog = async (id: string) => {
-  await ElMessageBox.confirm('确定删除该记录吗？', '删除检索记录', {
+  const action = await ElMessageBox.confirm('确定删除该记录吗？', '删除检索记录', {
     type: 'warning'
   });
-  const res = await fetch(`/api/knowledge/retrieval-logs/${id}`, {
-    method: 'DELETE'
-  });
-  if (res.ok) {
-    ElMessage.success('删除成功');
-    getLogs();
-  } else {
-    ElMessage.success('删除失败');
+  if (action === 'confirm') {
+    const res = await fetch(`/api/knowledge/retrieval-logs/${id}`, {
+      method: 'DELETE'
+    });
+    if (res.ok) {
+      ElMessage.success('删除成功');
+      getLogs();
+    } else {
+      ElMessage.success('删除失败');
+    }
   }
 };
 
@@ -273,7 +275,6 @@ onMounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 16px;
   gap: 16px;
   overflow: auto;
 
@@ -300,15 +301,6 @@ onMounted(() => {
   }
 
   .toolbar {
-    display: flex;
-    flex-wrap: nowrap;
-    justify-content: space-between;
-    align-items: end;
-    background: white;
-    padding: 16px;
-    border-radius: 8px;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
-
     .el-form-item {
       width: 49%;
 

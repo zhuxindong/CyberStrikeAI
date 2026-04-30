@@ -123,19 +123,23 @@ const loadConversationHistory = async (conversationId: string) => {
       const rawMessages = data.messages;
       if (rawMessages && Array.isArray(rawMessages)) {
         messages.splice(0);
-        rawMessages.forEach((msg: any) => {
+        rawMessages.forEach((messageRow: any) => {
           const item: Message = {
-            id: msg.id,
-            role: msg.role,
-            content: msg.content || '',
-            timestamp: new Date(msg.createdAt).getTime()
+            id: messageRow.id,
+            role: messageRow.role,
+            content: messageRow.content || '',
+            timestamp: new Date(messageRow.createdAt).getTime()
           };
-          if (msg.role === 'assistant') {
-            item.timelineItems = msg.messageList.map((item: any) => {
-              item.title = getTitleByType(item.type, item);
-              item.createdAt = dayjs(item.createdAt).format('YYYY-MM-DD HH:mm:ss');
-              item.args = item.dataJson ? JSON.stringify(JSON.parse(item.dataJson).arguments, null, 2) : '';
-              return item;
+          if (messageRow.role === 'assistant') {
+            item.timelineItems = [];
+            messageRow.messageList.forEach((msg: any) => {
+              if (msg.type === 'done') {
+                return;
+              }
+              msg.title = getTitleByType(msg.type, msg);
+              msg.createdAt = dayjs(msg.createdAt).format('YYYY-MM-DD HH:mm:ss');
+              msg.args = msg.dataJson ? JSON.stringify(JSON.parse(msg.dataJson).arguments, null, 2) : '';
+              item.timelineItems?.push(msg);
             });
             generateMCPCalls(item);
             item.expanded = false;
@@ -265,7 +269,7 @@ const sendMessage = async () => {
           progressTitle.value = '🔍 渗透测试进行中...';
           loadActiveTasks();
         }
-      } else if (['iteration', 'thinking', 'tool_calls_detected'].includes(type)) {
+      } else if (['iteration', 'thinking', 'tool_calls_detected', 'response'].includes(type)) {
         lastMessage.timelineItems.push({
           id,
           type,

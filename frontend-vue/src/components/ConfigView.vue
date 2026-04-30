@@ -156,7 +156,7 @@ onMounted(() => {
             <span class="hint">留空则使用OpenAI配置的base_url</span>
           </el-form-item>
           <el-form-item label="API Key">
-            <el-input type="password" v-model="config.emApiKey" placeholder="留空则使用OpenAI配置的api_key" />
+            <el-input type="password" show-password v-model="config.emApiKey" placeholder="留空则使用OpenAI配置的api_key" />
             <span class="hint">留空则使用OpenAI配置的api_key</span>
           </el-form-item>
           <el-form-item label="模型名称">

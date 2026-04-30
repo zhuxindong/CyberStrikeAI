@@ -257,7 +257,6 @@ onMounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 16px;
   gap: 16px;
   overflow: auto;
 
@@ -285,14 +284,6 @@ onMounted(() => {
 }
 
 .toolbar {
-  display: flex;
-  flex-wrap: nowrap;
-  justify-content: space-between;
-  align-items: end;
-  padding: 16px;
-  border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-
   .el-form-item {
     &:nth-child(1) {
       width: 20%;

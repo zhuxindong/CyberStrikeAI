@@ -57,6 +57,11 @@ const router = createRouter({
       component: () => import('./components/Webshell/Index.vue')
     },
     {
+      name: '文件管理',
+      path: '/chat-files',
+      component: () => import('./components/ChatFiles/Index.vue')
+    },
+    {
       name: 'MCP监控',
       path: '/mcp-monitor',
       component: () => import('./components/MCPMonitor.vue')

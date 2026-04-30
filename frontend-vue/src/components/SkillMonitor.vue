@@ -1,6 +1,6 @@
 <template>
   <div class="skill-monitor">
-    <div class="actions">
+    <div>
       <el-button @click="getMonitorData">刷新</el-button>
     </div>
     <div class="monitor-section">
@@ -122,11 +122,6 @@ onMounted(() => {
 .skill-monitor {
   padding: 20px;
   overflow: auto;
-
-  >.actions {
-    display: flex;
-    flex-direction: row-reverse;
-  }
 
   .monitor-section {
     background: var(--bg-primary);

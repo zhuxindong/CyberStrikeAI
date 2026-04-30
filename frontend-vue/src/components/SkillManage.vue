@@ -1,6 +1,6 @@
 <template>
   <div class="skill-management">
-    <div class="actions">
+    <div>
       <el-button type="primary" @click="addSkill">创建Skill</el-button>
     </div>
     <div class="skills-controls">
@@ -117,11 +117,6 @@ const deleteSkill = async (name: string) => {
 .skill-management {
   padding: 20px;
   height: 100%;
-
-  >.actions {
-    display: flex;
-    flex-direction: row-reverse;
-  }
 
   .skills-controls {
     margin: 20px 0;
