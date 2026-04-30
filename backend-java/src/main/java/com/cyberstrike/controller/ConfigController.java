@@ -92,6 +92,66 @@ public class ConfigController {
 //        return ResponseEntity.ok(Map.of("tools", toolList));
 //    }
 
+    @Operation(summary = "获取所有可用工具（用于 @ 选择）", description = "GET /api/config/tool?all=true 返回所有工具")
+    @GetMapping("/tool")
+    public ResponseEntity<?> getTools(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int page_size,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "false") boolean all) {
+
+        // 1. 直接从 ToolRegistry 获取所有工具（已包含内置、MCP、YAML）
+        List<Map<String, Object>> allToolInfos = new ArrayList<>();
+
+        for (ToolRegistry.ToolDefinition tool : toolRegistry.getToolsAll()) {
+            Map<String, Object> info = new LinkedHashMap<>();
+            info.put("name", tool.name());
+            info.put("description", tool.description());
+            info.put("type", tool.toolType() != null ? tool.toolType() : "builtin");
+            allToolInfos.add(info);
+        }
+
+        // 2. 搜索过滤
+        if (search != null && !search.trim().isEmpty()) {
+            String lowerSearch = search.toLowerCase().trim();
+            allToolInfos = allToolInfos.stream()
+                    .filter(tool -> {
+                        String name = (String) tool.get("name");
+                        String desc = (String) tool.get("description");
+                        return (name != null && name.toLowerCase().contains(lowerSearch)) ||
+                                (desc != null && desc.toLowerCase().contains(lowerSearch));
+                    })
+                    .collect(Collectors.toList());
+        }
+
+        // 3. 排序
+        allToolInfos.sort(Comparator.comparing(t -> (String) t.get("name")));
+
+        // 4. all=true：返回所有工具（用于前端 @ 选择）
+        if (all) {
+            return ResponseEntity.ok(allToolInfos);
+        }
+
+        // 5. 分页模式（管理后台）
+        int total = allToolInfos.size();
+        int totalPages = page_size > 0 ? (int) Math.ceil((double) total / page_size) : 0;
+
+        List<Map<String, Object>> pagedTools = allToolInfos.stream()
+                .skip((page - 1) * page_size)
+                .limit(page_size)
+                .collect(Collectors.toList());
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("tools", pagedTools);
+        result.put("total", total);
+        result.put("page", page);
+        result.put("page_size", page_size);
+        result.put("total_page", totalPages);
+
+        return ResponseEntity.ok(result);
+    }
+
+
     @Operation(summary = "分页列出 YAML 工具", description = "GET /api/config/tools 支持搜索")
     @GetMapping("/tools")
     public ResponseEntity<?> getTools(

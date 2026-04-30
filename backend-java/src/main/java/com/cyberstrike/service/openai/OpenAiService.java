@@ -83,7 +83,7 @@ public class OpenAiService {
                 .defaultHeader("Authorization", "Bearer " + apiKey)
                 .defaultHeader("Content-Type", "application/json")
                 .messageConverters(converters -> {
-                    converters.clear();
+                    //converters.clear();
                     converters.add(new org.springframework.http.converter.json.MappingJackson2HttpMessageConverter(objectMapper));
                 })
                 .requestInterceptor(loggingInterceptor)
@@ -92,12 +92,23 @@ public class OpenAiService {
 
     // --- 3. 业务方法：直接使用单例的 restClient ---
     public OpenAIModels.ChatCompletionResponse chatCompletion(OpenAIModels.ChatCompletionRequest request) {
-        return restClient.post()
+        ObjectMapper objectMapper = new ObjectMapper();
+        // 先获取 JSON 字符串
+        String s = restClient.post()
                 .uri("/chat/completions")
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                 .body(request)
                 .retrieve()
-                .body(OpenAIModels.ChatCompletionResponse.class);
+                .body(String.class);
+
+        // 然后再手动反序列化为目标对象
+        try {
+            System.out.println("sssssssss:"+s);
+            return objectMapper.readValue(s, OpenAIModels.ChatCompletionResponse.class);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
     public OpenAIModels.EmbeddingResponse createEmbeddings(OpenAIModels.EmbeddingRequest request) {

@@ -571,7 +571,11 @@ public class ToolRegistry {
                     "properties": {
                         "file_path": {
                             "type": "string",
-                            "description": "要读取的文件完整路径，例如：/etc/passwd、/var/log/nginx/access.log、/home/user/app.py"
+                            "description": "要读取的文件完整路径"
+                        },
+                        "max_lines": {
+                            "type": "integer",
+                            "description": "最大读取行数，默认 200，最大 1000"
                         }
                     },
                     "required": ["file_path"]
@@ -579,13 +583,18 @@ public class ToolRegistry {
                 """,
                 (args) -> {
                     String filePath = args.get("file_path").asText();
-                    String connId = ToolContext.getWebShellConnectionId();
+                    int maxLines = args.has("max_lines") ? args.get("max_lines").asInt() : 200;
+                    maxLines = Math.min(maxLines, 1000);
 
+                    String connId = ToolContext.getWebShellConnectionId();
                     if (connId == null || connId.isEmpty()) {
                         return "错误：未找到 WebShell 连接 ID。请先选择一个目标服务器连接。";
                     }
 
-                    String command = "cat " + filePath;
+                    // 使用 head 限制行数，同时检查文件是否存在
+                    String command = String.format("if [ -f '%s' ]; then head -n %d '%s'; else echo '文件不存在: %s'; fi",
+                            filePath, maxLines, filePath, filePath);
+
                     return executeWebShellCommand(connId, command);
                 },
                 "WebShell");

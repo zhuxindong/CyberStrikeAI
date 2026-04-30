@@ -1,5 +1,6 @@
 package com.cyberstrike.service.openai.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -151,6 +152,7 @@ public class OpenAIModels {
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ChatCompletionMessage {
         @JsonProperty("role")
         private String role = "user";
@@ -339,7 +341,7 @@ public class OpenAIModels {
     }
 
     // --- Response ---
-
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ChatCompletionResponse {
         @JsonProperty("id")
         private String id;
@@ -403,6 +405,7 @@ public class OpenAIModels {
         }
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ChatCompletionChoice {
         @JsonProperty("index")
         private Integer index;
@@ -504,6 +507,7 @@ public class OpenAIModels {
         }
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Usage {
         @JsonProperty("prompt_tokens")
         private Integer promptTokens;
