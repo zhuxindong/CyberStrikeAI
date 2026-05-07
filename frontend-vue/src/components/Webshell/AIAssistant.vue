@@ -184,101 +184,108 @@ const sendMessage = async () => {
 
   scroll();
 
-  streamChat(userMsg, {
-    onMessage: (id, content, type, data) => {
-      // 最近的一条消息
-      const lastMessage: Message = messages[messages.length - 1];
-      lastMessage.expanded = true;
-      const timelineItems = lastMessage.timelineItems || [];
-      const title = getTitleByType(type, data, content);
-      const createdAt = dayjs(new Date()).format('YYYY-MM-DD HH:mm:ss');
-      // 保存任务ID
-      if (type === 'conversation') {
-        if (data && data.conversationId) {
-          // currentTaskId.value = data.taskId;
-          currentConversationId.value = data.conversationId;
-          getConversations();
+  streamChat(
+    {
+      message: userMsg,
+      conversationId: currentConversationId.value,
+      webshellConnectionId: connection.id
+    },
+    {
+      onMessage: (id, content, type, data) => {
+        // 最近的一条消息
+        const lastMessage: Message = messages[messages.length - 1];
+        lastMessage.expanded = true;
+        const timelineItems = lastMessage.timelineItems || [];
+        const title = getTitleByType(type, data, content);
+        const createdAt = dayjs(new Date()).format('YYYY-MM-DD HH:mm:ss');
+        // 保存任务ID
+        if (type === 'conversation') {
+          if (data && data.conversationId) {
+            // currentTaskId.value = data.taskId;
+            currentConversationId.value = data.conversationId;
+            getConversations();
+          }
+        } else if (['iteration', 'thinking', 'tool_calls_detected'].includes(type)) {
+          timelineItems.push({
+            id,
+            type,
+            createdAt,
+            title,
+            content
+          });
+        } else if (type === 'cancelled') {
+          timelineItems.push({
+            id,
+            type,
+            createdAt,
+            title,
+            content
+          });
+        } else if (type === 'progress') {
+          // progressTitle.value = content;
+        } else if (type === 'tool_call') {
+          timelineItems.push({
+            id,
+            type,
+            createdAt,
+            title,
+            content,
+            functionName: data.toolName,
+            args: JSON.stringify(data.arguments, null, 2)
+          });
+        } else if (type === 'tool_result') {
+          timelineItems.push({
+            id: data.executionId,
+            type,
+            createdAt,
+            title,
+            content,
+            resultStatus: data.resultStatus
+          });
+        } else if (type === 'error') {
+          timelineItems.push({
+            id,
+            type,
+            createdAt,
+            title,
+            content
+          });
         }
-      } else if (['iteration', 'thinking', 'tool_calls_detected'].includes(type)) {
-        timelineItems.push({
-          id,
-          type,
-          createdAt,
-          title,
-          content
-        });
-      } else if (type === 'cancelled') {
-        timelineItems.push({
-          id,
-          type,
-          createdAt,
-          title,
-          content
-        });
-      } else if (type === 'progress') {
-        // progressTitle.value = content;
-      } else if (type === 'tool_call') {
-        timelineItems.push({
-          id,
-          type,
-          createdAt,
-          title,
-          content,
-          functionName: data.toolName,
-          args: JSON.stringify(data.arguments, null, 2)
-        });
-      } else if (type === 'tool_result') {
-        timelineItems.push({
-          id: data.executionId,
-          type,
-          createdAt,
-          title,
-          content,
-          resultStatus: data.resultStatus
-        });
-      } else if (type === 'error') {
-        timelineItems.push({
-          id,
-          type,
-          createdAt,
-          title,
-          content
-        });
+        lastMessage.timelineItems = timelineItems;
+        scroll();
+      },
+      onCancel: () => {
+        const lastMessage: Message = messages[messages.length - 1];
+        const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
+        lastMessage.content = timelineItems[timelineItems.length - 1].content;
+        toggleTimeline(lastMessage);
+
+        loading.value = false;
+        // currentTaskId.value = undefined;
+        // progressTitle.value = '⛔ 任务已取消';
+        scroll();
+      },
+      onError: () => {
+        const lastMessage: Message = messages[messages.length - 1];
+        const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
+        lastMessage.content = timelineItems[timelineItems.length - 1]?.content;
+        loading.value = false;
+        // progressTitle.value = '❌ 执行失败';
+        scroll();
+      },
+      onDone: () => {
+        const lastMessage: Message = messages[messages.length - 1];
+        const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
+        lastMessage.content = timelineItems[timelineItems.length - 1].content;
+        toggleTimeline(lastMessage);
+
+        loading.value = false;
+        // currentTaskId.value = undefined;
+        // progressTitle.value = '✅ 渗透测试完成';
+        scroll();
       }
-      lastMessage.timelineItems = timelineItems;
-      scroll();
-    },
-    onCancel: () => {
-      const lastMessage: Message = messages[messages.length - 1];
-      const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
-      lastMessage.content = timelineItems[timelineItems.length - 1].content;
-      toggleTimeline(lastMessage);
-
-      loading.value = false;
-      // currentTaskId.value = undefined;
-      // progressTitle.value = '⛔ 任务已取消';
-      scroll();
-    },
-    onError: () => {
-      const lastMessage: Message = messages[messages.length - 1];
-      const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
-      lastMessage.content = timelineItems[timelineItems.length - 1]?.content;
-      loading.value = false;
-      // progressTitle.value = '❌ 执行失败';
-      scroll();
-    },
-    onDone: () => {
-      const lastMessage: Message = messages[messages.length - 1];
-      const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
-      lastMessage.content = timelineItems[timelineItems.length - 1].content;
-      toggleTimeline(lastMessage);
-
-      loading.value = false;
-      // currentTaskId.value = undefined;
-      // progressTitle.value = '✅ 渗透测试完成';
-      scroll();
     }
-  }, currentConversationId.value, '', connection.id);
+  );
 };
 </script>
 

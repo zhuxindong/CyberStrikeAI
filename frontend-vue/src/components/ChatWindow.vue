@@ -3,8 +3,7 @@ import { ref, watch, onMounted, reactive, useTemplateRef } from 'vue';
 import { getTitleByType, streamChat, scrollToBottom } from '../utils/chatService';
 import { escapeHtml } from '../utils/escape';
 import MarkdownIt from 'markdown-it';
-import { dayjs, ElMessage } from 'element-plus';
-// import 'element-plus/theme-chalk/display.css';
+import { dayjs, ElMessage, UploadRequestOptions, ClickOutside as vClickOutside } from 'element-plus';
 import { Loading, User, ArrowDown, Cpu, MagicStick, Box, Aim, ZoomIn, View, Cloudy, Check } from '@element-plus/icons-vue';
 import AttackChainView from './AttackChainView.vue';
 import McpCallDialog from "./McpCallDialog.vue";
@@ -13,6 +12,8 @@ import { storeToRefs } from 'pinia';
 import ConversationStore from "@/store/Conversation";
 import ChatStore from "@/store/Chat";
 import { useRoute } from 'vue-router';
+import request from '@/utils/request';
+import { Tool } from './McpView.vue';
 
 const md = new MarkdownIt();
 
@@ -56,7 +57,18 @@ interface ActiveTaskMessage {
   pinned: boolean;
 }
 
+export interface Attachment {
+  fileName: string;
+  mimeType: string;
+  serverPath: string;
+}
+
 const input = ref('');
+const showTools = ref(false);
+const searchingTools = ref(false);
+const tools = ref<Tool[]>([]);
+const filteredTools = ref<Tool[]>([]);
+
 const messages = reactive<Message[]>([]);
 const activeTasks = ref<ActiveTaskMessage[]>([]);
 const loading = ref(false);
@@ -64,6 +76,8 @@ const currentTaskId = ref<string | undefined>(undefined);
 const progressTitle = ref<string>('');
 const messageArea = useTemplateRef<HTMLElement>('messageArea');
 const messageContainers = useTemplateRef<HTMLElement[]>('messageContainer');
+// 上传的附件
+const attachments = ref<Attachment[]>([]);
 
 const showAttackChain = ref(false);
 const mcpCallDialogVisible = ref<boolean>(false);
@@ -110,6 +124,29 @@ const fetchRoles = async () => {
     }
   } catch (error) {
     console.error('Failed to fetch roles:', error);
+  }
+};
+
+// 加载工具
+const loadTools = async () => {
+  const res = await request({
+    url: '/api/config/tools',
+    params: {
+      all: true
+    }
+  });
+  if (res.status === 200) {
+    filteredTools.value = tools.value = res.data.tools;
+  }
+};
+
+// 过滤
+const filterTools = () => {
+  const match = input.value.match(/@\w+/);
+  if (match) {
+    filteredTools.value = tools.value.filter(tool => {
+      return tool.name.includes(match[0].slice(1));
+    });
   }
 };
 
@@ -207,6 +244,7 @@ onMounted(() => {
     }
   }
   fetchRoles();
+  loadTools();
 });
 
 const scroll = (ele?: HTMLElement) => {
@@ -222,6 +260,61 @@ const generateMCPCalls = (message: Message) => {
   }));
 };
 
+// 文件上传
+const upload = async (options: UploadRequestOptions) => {
+  const formData = new FormData();
+  const file = options.file;
+  formData.append('file', file);
+  formData.append('conversationId', currentConversationId.value);
+  const res = await request({
+    url: '/api/chat-uploads',
+    method: 'post',
+    data: formData
+  });
+  if (res.status === 200) {
+    ElMessage.success('文件上传成功');
+    attachments.value.push({
+      fileName: file.name,
+      mimeType: file.type,
+      serverPath: res.data.path
+    });
+    if (!input.value) {
+      input.value = '请根据上传的文件内容进行分析。';
+    }
+  } else {
+    ElMessage.error('文件上传失败');
+  }
+};
+
+const removeFile = (i: number) => {
+  attachments.value.splice(i, 1);
+};
+
+// 按键处理
+const onKeyDown = (e: KeyboardEvent) => {
+  const { key, code, altKey } = e;
+  showTools.value = false;
+
+  if (key === 'Enter') {
+    if (altKey) {
+      input.value += '\n';
+    } else {
+      e.preventDefault();
+      sendMessage();
+    }
+  } else if (key === '@') {
+    showTools.value = true;
+    searchingTools.value = true;
+  } else if (code === 'Space') {
+    searchingTools.value = false;
+  }
+
+  if (searchingTools.value) {
+    filterTools();
+  }
+};
+
+// 发送消息
 const sendMessage = async () => {
   if (!input.value.trim() || loading.value) return;
 
@@ -245,125 +338,133 @@ const sendMessage = async () => {
   });
 
   scroll();
-
   let streamingConversatinoId: string | undefined = currentConversationId.value;
   // Initial assistant placeholder tracking
-  streamChat(userMsg, {
-    onMessage: (id, content, type, data) => {
-      // 流式输出的对话Id和当前对话Id不一致时，不会输出对话
-      if (currentConversationId.value !== streamingConversatinoId) {
-        loadActiveTasks();
-        return;
-      }
-      // 最近的一条消息
-      const lastMessage: Message = messages[messages.length - 1];
-      lastMessage.expanded = true;
-      lastMessage.timelineItems = lastMessage.timelineItems || [];
-      const title = getTitleByType(type, data, content);
-      const createdAt = dayjs(new Date()).format('YYYY-MM-DD HH:mm:ss');
-      // 保存任务ID
-      if (type === 'conversation') {
-        if (data && data.taskId && data.conversationId) {
-          currentTaskId.value = data.taskId;
-          streamingConversatinoId = data.conversationId;
-          progressTitle.value = '🔍 渗透测试进行中...';
+  streamChat(
+    {
+      message: userMsg,
+      conversationId: currentConversationId.value,
+      role: selectedRole.value.name,
+      attachments: attachments.value
+    },
+    {
+      onMessage: (id, content, type, data) => {
+        // 流式输出的对话Id和当前对话Id不一致时，不会输出对话
+        if (currentConversationId.value !== streamingConversatinoId) {
           loadActiveTasks();
+          return;
         }
-      } else if (['iteration', 'thinking', 'tool_calls_detected', 'response'].includes(type)) {
-        lastMessage.timelineItems.push({
-          id,
-          type,
-          createdAt,
-          title,
-          content
-        });
-      } else if (type === 'cancelled') {
-        lastMessage.timelineItems.push({
-          id,
-          type,
-          createdAt,
-          title,
-          content
-        });
+        // 最近的一条消息
+        const lastMessage: Message = messages[messages.length - 1];
+        lastMessage.expanded = true;
+        lastMessage.timelineItems = lastMessage.timelineItems || [];
+        const title = getTitleByType(type, data, content);
+        const createdAt = dayjs(new Date()).format('YYYY-MM-DD HH:mm:ss');
+        // 保存任务ID
+        if (type === 'conversation') {
+          if (data && data.taskId && data.conversationId) {
+            currentTaskId.value = data.taskId;
+            streamingConversatinoId = data.conversationId;
+            progressTitle.value = '🔍 渗透测试进行中...';
+            loadActiveTasks();
+            attachments.value = [];
+          }
+        } else if (['iteration', 'thinking', 'tool_calls_detected', 'response'].includes(type)) {
+          lastMessage.timelineItems.push({
+            id,
+            type,
+            createdAt,
+            title,
+            content
+          });
+        } else if (type === 'cancelled') {
+          lastMessage.timelineItems.push({
+            id,
+            type,
+            createdAt,
+            title,
+            content
+          });
+          progressTitle.value = '⛔ 任务已取消';
+        } else if (type === 'progress') {
+          progressTitle.value = content;
+        } else if (type === 'tool_call') {
+          lastMessage.timelineItems.push({
+            id,
+            type,
+            createdAt,
+            title,
+            content,
+            functionName: data.toolName,
+            args: JSON.stringify(data.arguments, null, 2)
+          });
+        } else if (type === 'tool_result') {
+          lastMessage.timelineItems.push({
+            id: data.executionId,
+            type,
+            createdAt,
+            title,
+            content,
+            resultStatus: data.resultStatus
+          });
+        } else if (type === 'error') {
+          lastMessage.timelineItems.push({
+            id,
+            type,
+            createdAt,
+            title,
+            content
+          });
+          progressTitle.value = '❌ 执行失败';
+        }
+        scroll();
+      },
+      onCancel: () => {
+        stopLoadActiveTasks();
+        if (currentConversationId.value !== streamingConversatinoId) {
+          return;
+        }
+        const lastMessage: Message = messages[messages.length - 1];
+        const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
+        lastMessage.content = timelineItems[timelineItems.length - 1].content;
+        generateMCPCalls(lastMessage);
+        toggleTimeline(lastMessage);
+
+        loading.value = false;
+        currentTaskId.value = undefined;
         progressTitle.value = '⛔ 任务已取消';
-      } else if (type === 'progress') {
-        progressTitle.value = content;
-      } else if (type === 'tool_call') {
-        lastMessage.timelineItems.push({
-          id,
-          type,
-          createdAt,
-          title,
-          content,
-          functionName: data.toolName,
-          args: JSON.stringify(data.arguments, null, 2)
-        });
-      } else if (type === 'tool_result') {
-        lastMessage.timelineItems.push({
-          id: data.executionId,
-          type,
-          createdAt,
-          title,
-          content,
-          resultStatus: data.resultStatus
-        });
-      } else if (type === 'error') {
-        lastMessage.timelineItems.push({
-          id,
-          type,
-          createdAt,
-          title,
-          content
-        });
+        scroll();
+      },
+      onError: () => {
+        stopLoadActiveTasks();
+        if (currentConversationId.value !== streamingConversatinoId) {
+          return;
+        }
+        const lastMessage: Message = messages[messages.length - 1];
+        const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
+        lastMessage.content = timelineItems[timelineItems.length - 1]?.content;
+        loading.value = false;
         progressTitle.value = '❌ 执行失败';
+        scroll();
+      },
+      onDone: () => {
+        stopLoadActiveTasks();
+        if (currentConversationId.value !== streamingConversatinoId) {
+          return;
+        }
+        const lastMessage: Message = messages[messages.length - 1];
+        const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
+        lastMessage.content = timelineItems[timelineItems.length - 1].content;
+        generateMCPCalls(lastMessage);
+        toggleTimeline(lastMessage);
+
+        loading.value = false;
+        currentTaskId.value = undefined;
+        progressTitle.value = '✅ 渗透测试完成';
+        scroll();
       }
-      scroll();
-    },
-    onCancel: () => {
-      stopLoadActiveTasks();
-      if (currentConversationId.value !== streamingConversatinoId) {
-        return;
-      }
-      const lastMessage: Message = messages[messages.length - 1];
-      const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
-      lastMessage.content = timelineItems[timelineItems.length - 1].content;
-      generateMCPCalls(lastMessage);
-      toggleTimeline(lastMessage);
-      
-      loading.value = false;
-      currentTaskId.value = undefined;
-      progressTitle.value = '⛔ 任务已取消';
-      scroll();
-    },
-    onError: () => {
-      stopLoadActiveTasks();
-      if (currentConversationId.value !== streamingConversatinoId) {
-        return;
-      }
-      const lastMessage: Message = messages[messages.length - 1];
-      const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
-      lastMessage.content = timelineItems[timelineItems.length - 1]?.content;
-      loading.value = false;
-      progressTitle.value = '❌ 执行失败';
-      scroll();
-    },
-    onDone: () => {
-      stopLoadActiveTasks();
-      if (currentConversationId.value !== streamingConversatinoId) {
-        return;
-      }
-      const lastMessage: Message = messages[messages.length - 1];
-      const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
-      lastMessage.content = timelineItems[timelineItems.length - 1].content;
-      generateMCPCalls(lastMessage);
-      toggleTimeline(lastMessage);
-      
-      loading.value = false;
-      currentTaskId.value = undefined;
-      progressTitle.value = '✅ 渗透测试完成';
-      scroll();
     }
-  }, currentConversationId.value, selectedRole.value?.name);
+  );
 };
 
 // 停止任务
@@ -577,16 +678,49 @@ const renderMarkdown = (text: string | undefined) => {
         </el-popover>
       </div>
 
-      <el-input
-        v-model="input"
-        :autosize="{ minRows: 1, maxRows: 6 }"
-        type="textarea"
-        placeholder="输入命令 (例如: 扫描 localhost)"
-        @keydown.enter.exact.prevent="sendMessage"
-        :disabled="loading"
-        class="chat-input"
-      />
-      <div>
+      <div class="input-box">
+        <div v-if="attachments.length" class="chat-file-list">
+          <div v-for="(attachment, i) in attachments" class="chat-file-chip">
+            <span class="chat-file-chip-name">{{ attachment.fileName }}</span>
+            <span class="chat-file-chip-remove" @click="removeFile(i)">x</span>
+          </div>
+        </div>
+        <el-input
+          v-model="input"
+          :autosize="{ minRows: 1, maxRows: 6 }"
+          type="textarea"
+          placeholder="输入命令,例如: 扫描 localhost(Alt+回车换行)"
+          @keydown="onKeyDown"
+          :disabled="loading"
+        />
+        <div v-show="showTools && filteredTools.length" class="mention-suggestions-list" v-click-outside="() => showTools = false">
+          <div v-for="tool in filteredTools" class="mention-item">
+            <div class="mention-item-name">
+              <span class="mention-item-icon">🔧</span>
+              <span class="mention-item-text">{{ tool.name }}</span>
+              <span :class="['mention-item-badge', { 'internal': !tool.isExternal }]">
+                {{ tool.isExternal ? '外部' : '内置' }}
+              </span>
+            </div>
+            <div class="mention-item-desc">
+              {{ tool.description }}
+            </div>
+            <div class="mention-item-meta">
+              <span :class="['mention-status', tool.enabled ? 'enabled' : 'disabled']">
+                {{ tool.enabled ? '可用' : tool.roleEnabled ? '已禁用' : '已禁用（当前角色' }}
+              </span>
+              <span class="mention-origin">
+                {{ tool.isExternal ? (tool.externalMcp ? `来源：${tool.externalMcp}` : '来源：外部MCP') : '来源：内置工具' }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <el-upload :show-file-list="false" :http-request="upload">
+          <el-button icon="Upload"></el-button>
+        </el-upload>
         <el-button type="primary" :loading="loading" @click="sendMessage" :disabled="loading">发送</el-button>
         <el-button v-if="loading" type="danger" @click="stopTask()">停止</el-button>
         <el-button 
@@ -1024,8 +1158,174 @@ const renderMarkdown = (text: string | undefined) => {
   border-top: 1px solid var(--el-border-color);
   display: flex;
   gap: 10px;
-  align-items: flex-end; /* changed to align bottom */
-  // background-color: #f8f9fa; /* added background */
+  align-items: flex-end;
+
+  .input-box {
+    position: relative;
+    flex: 1;
+
+    .chat-file-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      min-height: 0;
+      margin-bottom: 12px;
+
+      .chat-file-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        background: rgba(0, 102, 255, 0.08);
+        border: 1px solid rgba(0, 102, 255, 0.2);
+        border-radius: 8px;
+        font-size: 12px;
+        color: var(--text-primary);
+        max-width: 200px;
+      }
+
+      .chat-file-chip-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .chat-file-chip-remove {
+        flex-shrink: 0;
+        width: 18px;
+        height: 18px;
+        padding: 0;
+        border: none;
+        background: rgba(0, 0, 0, 0.08);
+        border-radius: 50%;
+        cursor: pointer;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s, color 0.2s;
+      }
+    }
+
+    .mention-suggestions-list {
+      position: absolute;
+      bottom: 56px;
+      max-height: 320px;
+      overflow-y: auto;
+      padding: 12px;
+      box-sizing: border-box;
+      background-color: var(--bg-tertiary);
+      border-radius: 12px;
+
+      .mention-item {
+        padding: 12px 18px;
+        width: calc(100% - 40px);
+        border: 1px solid rgba(15, 23, 42, 0.05);
+        background: #f7f8fa;
+        cursor: pointer;
+        font-size: 0.875rem;
+        color: rgba(15, 23, 42, 0.9);
+        transition: background 0.18s ease, border-left-color 0.18s ease, color 0.15s ease, transform 0.18s ease;
+        border-left: 3px solid transparent;
+        border-radius: 12px;
+        margin: 0 0 8px 0;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+
+        &:hover {
+          background: #ffffff;
+          border-left-color: rgba(0, 0, 0, 0.18);
+          transform: translateY(-1px);
+          box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+        }
+
+        &.active {
+          background: linear-gradient(105deg, rgba(0, 102, 255, 0.08), rgba(0, 102, 255, 0.02)) !important;
+          border-left-color: rgba(0, 102, 255, 0.6);
+          transform: translateY(-2px);
+          box-shadow: 0 10px 26px rgba(0, 102, 255, 0.22);
+          color: rgba(15, 23, 42, 0.95);
+        }
+
+        &.disabled {
+          opacity: 0.65;
+          box-shadow: none;
+        }
+      }
+
+      .mention-item-name {
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: rgba(15, 23, 42, 0.95);
+      }
+
+      .mention-item-icon {
+        font-size: 1rem;
+      }
+
+      .mention-item-text {
+        flex: 1;
+      }
+
+      .mention-item-desc {
+        font-size: 0.78rem;
+        color: var(--text-muted);
+        line-height: 1.4;
+        word-break: break-word;
+      }
+
+      .mention-item-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        font-size: 0.75rem;
+      }
+
+      .mention-status {
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-weight: 600;
+
+        &.enabled {
+          background: rgba(46, 204, 113, 0.18);
+          color: #1e8a4d;
+        }
+        &.disabled {
+          background: rgba(231, 76, 60, 0.18);
+          color: #b23d2f;
+        }
+      }
+
+      .mention-origin {
+        color: var(--text-secondary);
+      }
+
+      .mention-item-badge {
+        font-size: 0.68rem;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.06);
+        color: var(--text-primary);
+        font-weight: 600;
+
+        &.internal {
+          background: rgba(108, 117, 125, 0.18);
+          color: rgba(33, 37, 41, 0.9);
+        }
+      }
+    }
+  }
+
+  .btn-group {
+    display: inline-flex;
+    gap: 4px;
+
+    .el-button {
+      margin-left: 0;
+    }
+  }
 }
 
 .role-selector-btn {
@@ -1068,10 +1368,6 @@ const renderMarkdown = (text: string | undefined) => {
   gap: 8px;
   color: var(--el-text-color-secondary);
   padding: 10px;
-}
-
-.chat-input {
-    flex: 1;
 }
 </style>
 

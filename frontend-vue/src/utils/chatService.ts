@@ -1,3 +1,4 @@
+import { Attachment } from "@/components/ChatWindow.vue";
 import { escapeHtml } from "./escape";
 
 export interface StreamCallbacks {
@@ -5,6 +6,14 @@ export interface StreamCallbacks {
   onCancel: () => void;
   onError: () => void;
   onDone: () => void;
+}
+
+interface SteamParams {
+  message: string;
+  conversationId?: string;
+  role?: string;
+  webshellConnectionId?: string;
+  attachments?: Attachment[];
 }
 
 // 滚动到底部
@@ -55,12 +64,10 @@ export const getTitleByType = (type: string, params: any, content?: string) => {
 
 // 流式输出
 export async function streamChat(
-  message: string,
+  params: SteamParams,
   callbacks: StreamCallbacks,
-  conversationId?: string,
-  role?: string,
-  webshellConnectionId?: string
 ) {
+  const { message, conversationId, role, webshellConnectionId, attachments } = params;
   const response = await fetch("/api/agent-loop/stream", {
     method: "POST",
     headers: {
@@ -70,7 +77,8 @@ export async function streamChat(
       message,
       conversationId,
       role,
-      webshellConnectionId
+      webshellConnectionId,
+      attachments
     }),
   });
 
