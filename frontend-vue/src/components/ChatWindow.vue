@@ -65,7 +65,6 @@ export interface Attachment {
 
 const input = ref('');
 const showTools = ref(false);
-const searchingTools = ref(false);
 const tools = ref<Tool[]>([]);
 const filteredTools = ref<Tool[]>([]);
 
@@ -82,6 +81,8 @@ const attachments = ref<Attachment[]>([]);
 const showAttackChain = ref(false);
 const mcpCallDialogVisible = ref<boolean>(false);
 const mcpCallDetail = ref<unknown>({});
+  
+const inputRef = useTemplateRef('inputRef');
 
 const conversionStore = ConversationStore();
 const chatStore = ChatStore();
@@ -140,13 +141,17 @@ const loadTools = async () => {
   }
 };
 
-// 过滤
-const filterTools = () => {
-  const match = input.value.match(/@\w+/);
-  if (match) {
+// 过滤工具
+const filterTools = (str: string) => {
+  const match = str.match(/@\w*$/);
+  const isSpaceFollowed = /@\w*\s+$/.test(str);
+  if (match && !isSpaceFollowed) {
+    showTools.value = true;
     filteredTools.value = tools.value.filter(tool => {
       return tool.name.includes(match[0].slice(1));
     });
+  } else {
+    showTools.value = false;
   }
 };
 
@@ -292,9 +297,7 @@ const removeFile = (i: number) => {
 
 // 按键处理
 const onKeyDown = (e: KeyboardEvent) => {
-  const { key, code, altKey } = e;
-  showTools.value = false;
-
+  const { key, altKey } = e;
   if (key === 'Enter') {
     if (altKey) {
       input.value += '\n';
@@ -302,16 +305,15 @@ const onKeyDown = (e: KeyboardEvent) => {
       e.preventDefault();
       sendMessage();
     }
-  } else if (key === '@') {
-    showTools.value = true;
-    searchingTools.value = true;
-  } else if (code === 'Space') {
-    searchingTools.value = false;
   }
+};
 
-  if (searchingTools.value) {
-    filterTools();
-  }
+// 输入处理
+const onInput = () => {
+  const el: HTMLInputElement = inputRef.value?.$el.querySelector('textarea');
+  const i = el.selectionStart || 0;
+  const str = el.value.slice(0, i);
+  filterTools(str);
 };
 
 // 发送消息
@@ -686,11 +688,13 @@ const renderMarkdown = (text: string | undefined) => {
           </div>
         </div>
         <el-input
+          ref="inputRef"
           v-model="input"
           :autosize="{ minRows: 1, maxRows: 6 }"
           type="textarea"
           placeholder="输入命令,例如: 扫描 localhost(Alt+回车换行)"
           @keydown="onKeyDown"
+          @input="onInput"
           :disabled="loading"
         />
         <div v-show="showTools && filteredTools.length" class="mention-suggestions-list" v-click-outside="() => showTools = false">

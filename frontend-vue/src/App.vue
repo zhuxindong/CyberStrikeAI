@@ -76,6 +76,19 @@ const APIHref = `${location.protocol}//${location.hostname}:30001/swagger-ui.htm
             </el-menu-item>
           </el-menu-item-group>
         </el-sub-menu>
+        <el-sub-menu index="agents">
+          <template #title>
+            <el-icon>
+              <Compass />
+            </el-icon>
+            <span class="nav-label">Agents</span>
+          </template>
+          <el-menu-item-group>
+            <el-menu-item index="/agents-management">
+              <span class="nav-label">Agent管理</span>
+            </el-menu-item>
+          </el-menu-item-group>
+        </el-sub-menu>
         <el-menu-item index="/role">
           <el-icon>
             <User />

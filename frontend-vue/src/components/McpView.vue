@@ -3,11 +3,14 @@ import { ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import MCPDialog from './MCPDialog.vue';
 
-interface Tool {
+export interface Tool {
   name: string;
   description: string;
   source: string;
   enabled: boolean;
+  roleEnabled: boolean;
+  isExternal: boolean;
+  externalMcp: boolean;
 }
 
 export interface McpServer {

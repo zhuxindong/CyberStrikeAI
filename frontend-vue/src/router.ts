@@ -42,6 +42,11 @@ const router = createRouter({
       component: () => import('./components/SkillManage.vue')
     },
     {
+      name: 'Agents管理',
+      path: '/agents-management',
+      component: () => import('./components/Agent/AgentManagement.vue')
+    },
+    {
       name: '角色管理',
       path: '/role',
       component: () => import('./components/RolesView.vue')

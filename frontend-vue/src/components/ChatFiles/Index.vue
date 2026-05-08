@@ -21,9 +21,8 @@
       </el-form-item>
     </el-form>
     <div class="chat-files-operation">
-      <el-upload :show-file-list="false" action="/api/chat-uploads" :on-error="onFileUploadError"
-        :on-success="onFileUploadSuccess">
-        <el-button type="primary">上传文件</el-button>
+      <el-upload :show-file-list="false" :http-request="upload">
+        <el-button type="primary" @click="beforeFileUpload(currentPath)">上传文件</el-button>
       </el-upload>
       <template v-if="groupMethod === '4'">
         <el-button @click="showFile">新建文件夹</el-button>
@@ -80,8 +79,8 @@
         <div v-if="filePath.length" class="chat-files-navigator">
           <el-breadcrumb separator="/">
             <el-breadcrumb-item v-for="({ name, path }, i) in filePath"">
-              <span v-if="i < filePath.length" @click="goFolder(path)">{{ name }}</span>
-              <span v-else>{{ name }}</span>
+              <el-link v-if="i < filePath.length - 1" type="primary" @click="goFolder(path)">{{ name }}</el-link>
+              <el-link v-else underline="never">{{ name }}</el-link>
             </el-breadcrumb-item>
           </el-breadcrumb>
           <el-link v-if="filePath.length > 0" type="primary" size="small" @click="goUpper">上级</el-link>
@@ -115,7 +114,7 @@
               <template v-else>
                 <div class="chat-files-table-operation">
                   <el-upload :show-file-list="false" :http-request="upload">
-                    <el-button icon="Upload" @click="beforeFileUpload(row)"></el-button>
+                    <el-button icon="Upload" @click="beforeFileUpload(row.relativePath)"></el-button>
                   </el-upload>
                   <el-button icon="CopyDocument" @click="copyPath(row.relativePath)"></el-button>
                   <el-button type="danger" icon="Delete" @click="deleteFile(row.relativePath)"></el-button>
@@ -380,6 +379,10 @@ const handleGroup = (files: File[]) => {
       });
       collapsed.value.push(title);
     }
+    // 按日期分组时，按倒序排序
+    if (groupMethod.value === '2') {
+      groups.value.sort((a, b) => new Date(a.title) < new Date(b.title) ? 1 : -1);
+    }
   });
 };
 
@@ -406,7 +409,9 @@ const upload = async (options: UploadRequestOptions) => {
   const formData = new FormData();
   const file = options.file;
   formData.append('file', file);
-  formData.append('relativeDir', `${relativeDir}/${file.name}`);
+  if (relativeDir) {
+    formData.append('relativeDir', `${relativeDir}/${file.name}`);
+  }
   const res = await request({
     url: '/api/chat-uploads',
     method: 'post',
@@ -420,17 +425,8 @@ const upload = async (options: UploadRequestOptions) => {
   }
 };
 
-const beforeFileUpload = (file: File) => {
-  relativeDir = file.relativePath;
-};
-
-const onFileUploadError = () => {
-  ElMessage.error('文件上传失败');
-};
-
-const onFileUploadSuccess = () => {
-  ElMessage.success('文件上传成功');
-  getFileList();
+const beforeFileUpload = (path: string) => {
+  relativeDir = path;
 };
 
 const rename = async (file: File) => {
@@ -489,11 +485,11 @@ const copyPath = (relativePath: string) => {
   if (navigator.clipboard) {
     navigator.clipboard.writeText(relativePath || '')
       .then(() => {
-        ElMessage.success('复制成功');
+        ElMessage.success('文件路径复制成功');
       })
       .catch((err) => {
         console.log(err);
-        ElMessage.error('复制失败');
+        ElMessage.error('文件路径复制失败');
       });
   } else {
     // 创建临时输入框
