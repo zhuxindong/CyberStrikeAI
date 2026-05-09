@@ -143,8 +143,8 @@ const loadTools = async () => {
 
 // 过滤工具
 const filterTools = (str: string) => {
-  const match = str.match(/@\w*$/);
-  const isSpaceFollowed = /@\w*\s+$/.test(str);
+  const match = str.match(/@(\w*-?)*$/);
+  const isSpaceFollowed = /@(\w*-?)*\s+$/.test(str);
   if (match && !isSpaceFollowed) {
     showTools.value = true;
     filteredTools.value = tools.value.filter(tool => {
@@ -314,6 +314,16 @@ const onInput = () => {
   const i = el.selectionStart || 0;
   const str = el.value.slice(0, i);
   filterTools(str);
+};
+
+// 选择工具
+const selectTool = (tool: Tool) => {
+  const i = input.value.indexOf('@') + 1;
+  const value = input.value;
+  input.value = `${value.slice(0, i)}${tool.name} ${value.slice(i + tool.name.length)}`;
+  const el: HTMLInputElement = inputRef.value?.$el.querySelector('textarea');
+  el.focus();
+  showTools.value = false;
 };
 
 // 发送消息
@@ -698,7 +708,7 @@ const renderMarkdown = (text: string | undefined) => {
           :disabled="loading"
         />
         <div v-show="showTools && filteredTools.length" class="mention-suggestions-list" v-click-outside="() => showTools = false">
-          <div v-for="tool in filteredTools" class="mention-item">
+          <div v-for="tool in filteredTools" class="mention-item" @click="selectTool(tool)">
             <div class="mention-item-name">
               <span class="mention-item-icon">🔧</span>
               <span class="mention-item-text">{{ tool.name }}</span>
