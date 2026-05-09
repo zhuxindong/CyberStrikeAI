@@ -84,5 +84,6 @@ springdoc:
     enabled: true
 
 
-
-
+cyberstrike:
+  upload:
+    path: ./chat_uploads  # 上传文件存储目录
