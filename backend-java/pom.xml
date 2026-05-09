@@ -69,6 +69,18 @@
 			<artifactId>httpclient5</artifactId>
 			<version>5.1</version> <!-- 或 Spring Boot 管理的版本 -->
 		</dependency>
+		<!-- Apache POI for Word documents -->
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+			<version>5.2.5</version>
+		</dependency>
+		<!-- 处理 .doc 旧格式（HWPF） -->
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-scratchpad</artifactId>
+			<version>5.2.5</version>
+		</dependency>
 	</dependencies>
 
 	<build>

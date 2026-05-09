@@ -15,12 +15,16 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
@@ -45,6 +49,9 @@ public class ToolRegistry {
     private final McpServerRepository mcpServerRepository;
     private final com.cyberstrike.skills.SkillsManager skillsManager;
     private final SkillsStatsService skillsStatsService;
+
+    @Value("${cyberstrike.upload.path:./chat_uploads}")
+    private String uploadBasePath;
 
     public ToolRegistry(YamlToolLoader yamlToolLoader,
                         KnowledgeService knowledgeService,
@@ -564,14 +571,14 @@ public class ToolRegistry {
 
         // 工具3: 读取文件
         registerBuiltinTool("read_file",
-                "读取服务器上的文件内容。支持文本文件如 .txt、.log、.conf、.xml、.json、.py、.sh、.php 等。",
+                "读取文件内容。支持读取用户上传的附件文件（如 .txt、.log、.json、.xml、.py、.sh、.doc、.docx 等）和远程服务器上的文件。",
                 """
                 {
                     "type": "object",
                     "properties": {
                         "file_path": {
                             "type": "string",
-                            "description": "要读取的文件完整路径"
+                            "description": "文件路径。对于用户上传的附件，使用 serverPath 路径；对于远程服务器文件，使用服务器上的完整路径"
                         },
                         "max_lines": {
                             "type": "integer",
@@ -586,16 +593,101 @@ public class ToolRegistry {
                     int maxLines = args.has("max_lines") ? args.get("max_lines").asInt() : 200;
                     maxLines = Math.min(maxLines, 1000);
 
-                    String connId = ToolContext.getWebShellConnectionId();
-                    if (connId == null || connId.isEmpty()) {
-                        return "错误：未找到 WebShell 连接 ID。请先选择一个目标服务器连接。";
+                    // 判断是否是本地附件（路径包含 chat_uploads 或以日期格式开头）
+                    boolean isLocalAttachment = filePath.contains("chat_uploads") || filePath.matches("^\\d{4}-\\d{2}-\\d{2}/.*");
+
+                    if (isLocalAttachment) {
+                        // 本地附件读取
+                        try {
+                            Path uploadRoot = Paths.get(uploadBasePath != null ? uploadBasePath : "chat_uploads").toAbsolutePath().normalize();
+                            Path targetPath = Paths.get(filePath);
+                            if (!targetPath.isAbsolute()) {
+                                targetPath = uploadRoot.resolve(filePath).normalize();
+                            }
+                            if (!targetPath.startsWith(uploadRoot)) {
+                                return "错误：非法的文件路径";
+                            }
+                            if (!Files.exists(targetPath)) {
+                                return "文件不存在: " + filePath;
+                            }
+                            if (Files.isDirectory(targetPath)) {
+                                return "错误：路径指向的是目录，不是文件";
+                            }
+
+                            String fileName = targetPath.getFileName().toString().toLowerCase();
+
+                            // 处理 Word 文档
+                            if (fileName.endsWith(".doc") || fileName.endsWith(".docx")) {
+                                try {
+                                    StringBuilder content = new StringBuilder();
+                                    if (fileName.endsWith(".docx")) {
+                                        // 处理 .docx 文件
+                                        try (java.io.FileInputStream fis = new java.io.FileInputStream(targetPath.toFile());
+                                             org.apache.poi.xwpf.usermodel.XWPFDocument document = new org.apache.poi.xwpf.usermodel.XWPFDocument(fis)) {
+                                            for (var paragraph : document.getParagraphs()) {
+                                                content.append(paragraph.getText()).append("\n");
+                                            }
+                                        }
+                                    } else {
+                                        // 处理 .doc 文件
+                                        try (java.io.FileInputStream fis = new java.io.FileInputStream(targetPath.toFile());
+                                             org.apache.poi.hwpf.HWPFDocument document = new org.apache.poi.hwpf.HWPFDocument(fis)) {
+                                            org.apache.poi.hwpf.extractor.WordExtractor extractor = new org.apache.poi.hwpf.extractor.WordExtractor(document);
+                                            content.append(extractor.getText());
+                                        }
+                                    }
+                                    String result = content.toString();
+                                    if (result.isEmpty()) {
+                                        return "Word 文档内容为空";
+                                    }
+                                    // 如果内容过长，按行数限制
+                                    String[] lines = result.split("\n");
+                                    if (lines.length > maxLines) {
+                                        StringBuilder sb = new StringBuilder();
+                                        sb.append(String.format("文件共有 %d 行，仅显示前 %d 行：\n\n", lines.length, maxLines));
+                                        for (int i = 0; i < maxLines; i++) {
+                                            sb.append(lines[i]).append("\n");
+                                        }
+                                        return sb.toString();
+                                    }
+                                    return result;
+                                } catch (Exception e) {
+                                    return "读取 Word 文档失败: " + e.getMessage() + "。请将文件内容复制为文本格式后粘贴。";
+                                }
+                            }
+
+                            // 处理 PDF 文件
+                            if (fileName.endsWith(".pdf")) {
+                                return "无法直接读取 PDF 文件内容。请将文件内容复制为文本格式后粘贴。";
+                            }
+
+                            // 处理文本文件
+                            List<String> lines = Files.readAllLines(targetPath);
+                            if (lines.isEmpty()) {
+                                return "文件为空";
+                            }
+                            if (lines.size() > maxLines) {
+                                StringBuilder sb = new StringBuilder();
+                                sb.append(String.format("文件共有 %d 行，仅显示前 %d 行：\n\n", lines.size(), maxLines));
+                                for (int i = 0; i < maxLines; i++) {
+                                    sb.append(lines.get(i)).append("\n");
+                                }
+                                return sb.toString();
+                            }
+                            return String.join("\n", lines);
+                        } catch (IOException e) {
+                            return "读取文件失败: " + e.getMessage();
+                        }
+                    } else {
+                        // 远程服务器文件读取
+                        String connId = ToolContext.getWebShellConnectionId();
+                        if (connId == null || connId.isEmpty()) {
+                            return "错误：未找到 WebShell 连接 ID。请先选择一个目标服务器连接。";
+                        }
+                        String command = String.format("if [ -f '%s' ]; then head -n %d '%s'; else echo '文件不存在: %s'; fi",
+                                filePath, maxLines, filePath, filePath);
+                        return executeWebShellCommand(connId, command);
                     }
-
-                    // 使用 head 限制行数，同时检查文件是否存在
-                    String command = String.format("if [ -f '%s' ]; then head -n %d '%s'; else echo '文件不存在: %s'; fi",
-                            filePath, maxLines, filePath, filePath);
-
-                    return executeWebShellCommand(connId, command);
                 },
                 "WebShell");
 

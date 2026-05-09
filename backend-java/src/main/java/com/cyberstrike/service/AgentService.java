@@ -54,6 +54,7 @@ public class AgentService {
     private final ToolRegistry toolRegistry;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ConfigRepository configRepository;
+    private final AgentFileService agentFileService;  // 改为 AgentFileService
 
     // 任务管理
     private final Map<String, TaskInfo> runningTasks = new ConcurrentHashMap<>();
@@ -63,15 +64,19 @@ public class AgentService {
     public AgentService(OpenAiService openAiService,
                         ConversationRepository conversationRepository,
                         MessageRepository messageRepository,
-                        ChatCompletionMessageRepository chatCompletionMessageRepository, ToolRegistry toolRegistry,
-                        ConfigRepository configRepository) {
+                        ChatCompletionMessageRepository chatCompletionMessageRepository,
+                        ToolRegistry toolRegistry,
+                        ConfigRepository configRepository,
+                        AgentFileService agentFileService) {  // 改为 AgentFileService
         this.openAiService = openAiService;
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
         this.chatCompletionMessageRepository = chatCompletionMessageRepository;
         this.toolRegistry = toolRegistry;
         this.configRepository = configRepository;
+        this.agentFileService = agentFileService;
     }
+
 
     /**
      * 获取当前配置的模型名称
@@ -154,73 +159,118 @@ public class AgentService {
      * @param validatedPaths 验证通过的绝对路径列表
      * @return 追加了附件信息的用户消息
      */
-    private String appendAttachmentsToMessage(String originalMessage,
-                                              List<ChatRequest.Attachment> attachments,
-                                              List<String> validatedPaths) {
-        if (attachments == null || attachments.isEmpty() || validatedPaths.isEmpty()) {
-            return originalMessage;
-        }
+//    private String appendAttachmentsToMessage(String originalMessage,
+//                                              List<ChatRequest.Attachment> attachments,
+//                                              List<String> validatedPaths) {
+//        if (attachments == null || attachments.isEmpty() || validatedPaths.isEmpty()) {
+//            return originalMessage;
+//        }
+//
+//        StringBuilder sb = new StringBuilder();
+//        sb.append(originalMessage);
+//        sb.append("\n\n用户上传了以下文件，你需要分析这些文件的内容才能回答问题。\n");
+//        sb.append("【重要】你必须先使用 read_file 工具读取文件内容，然后再回答。\n\n");
+//
+//        for (int i = 0; i < attachments.size(); i++) {
+//            ChatRequest.Attachment att = attachments.get(i);
+//            String path = (i < validatedPaths.size()) ? validatedPaths.get(i) : "";
+//
+//            sb.append("文件 ").append(i + 1).append(":\n");
+//            sb.append("  - 文件名: ").append(att.getFileName()).append("\n");
+//            sb.append("  - 路径: ").append(path).append("\n");
+//            if (att.getMimeType() != null && !att.getMimeType().isEmpty()) {
+//                sb.append("  - 类型: ").append(att.getMimeType()).append("\n");
+//            }
+//            sb.append("\n");
+//        }
+//
+//        sb.append("请按顺序执行以下操作：\n");
+//        sb.append("1. 对每个文件调用 read_file 工具，参数 file_path 填上面给出的路径\n");
+//        sb.append("2. 读取完所有文件后，根据文件内容回答用户的问题\n");
+//        sb.append("3. 如果文件读取失败，请告知用户错误原因\n");
+//
+//        return sb.toString();
+//    }
 
-        StringBuilder sb = new StringBuilder();
-        sb.append(originalMessage);
-        sb.append("\n\n用户上传了以下文件，你需要分析这些文件的内容才能回答问题。\n");
-        sb.append("【重要】你必须先使用 read_file 工具读取文件内容，然后再回答。\n\n");
+    /**
+     * 从 agents 目录构建系统提示词
+     * 优先使用主代理（orchestrator.md）的提示词，否则使用子代理
+     */
+    private String buildSystemPrompt(String roleName) {
+        try {
+            if (agentFileService != null) {
+                // 如果指定了角色名称，尝试获取对应角色的提示词
+                if (roleName != null && !roleName.trim().isEmpty()) {
+                    try {
+                        String filename = roleName + ".md";
+                        com.cyberstrike.entity.AgentMetadata agent = agentFileService.getAgent(filename);
+                        if (agent != null && agent.getInstruction() != null && !agent.getInstruction().trim().isEmpty()) {
+                            log.info("使用角色提示词: {}", filename);
+                            return agent.getInstruction();
+                        }
+                    } catch (Exception e) {
+                        log.debug("未找到角色文件: {}.md", roleName);
+                    }
+                }
 
-        for (int i = 0; i < attachments.size(); i++) {
-            ChatRequest.Attachment att = attachments.get(i);
-            String path = (i < validatedPaths.size()) ? validatedPaths.get(i) : "";
-
-            sb.append("文件 ").append(i + 1).append(":\n");
-            sb.append("  - 文件名: ").append(att.getFileName()).append("\n");
-            sb.append("  - 路径: ").append(path).append("\n");
-            if (att.getMimeType() != null && !att.getMimeType().isEmpty()) {
-                sb.append("  - 类型: ").append(att.getMimeType()).append("\n");
+                // 尝试获取主代理（orchestrator.md）
+                try {
+                    com.cyberstrike.entity.AgentMetadata orchestrator = agentFileService.getAgent("orchestrator.md");
+                    if (orchestrator != null && orchestrator.getInstruction() != null && !orchestrator.getInstruction().trim().isEmpty()) {
+                        log.info("使用主代理提示词: orchestrator.md");
+                        return orchestrator.getInstruction();
+                    }
+                } catch (Exception e) {
+                    log.debug("未找到主代理文件: orchestrator.md");
+                }
             }
-            sb.append("\n");
+        } catch (Exception e) {
+            log.warn("从 agents 目录获取系统提示词失败，使用默认提示词", e);
         }
 
-        sb.append("请按顺序执行以下操作：\n");
-        sb.append("1. 对每个文件调用 read_file 工具，参数 file_path 填上面给出的路径\n");
-        sb.append("2. 读取完所有文件后，根据文件内容回答用户的问题\n");
-        sb.append("3. 如果文件读取失败，请告知用户错误原因\n");
-
-        return sb.toString();
+        // 后备默认提示词
+        return getDefaultSystemPrompt();
     }
 
-    private static final String SYSTEM_PROMPT = """
-            你是CyberStrikeAI，是一个专业的网络安全渗透测试专家。你可以使用各种安全工具进行自主渗透测试。分析目标并选择最佳测试策略。
-            
-            ### 核心指令
-            你要把你的行动告诉用户。Content 内容绝对不能为 null 或空字符串。
-            
-            ### 强制输出规范
-            你的响应必须遵循以下流程：
-            1. **分析与执行**：在调用工具前，描述你的意图（如"正在扫描端口..."）。
-            2. **最终总结 (关键)**：当所有工具执行完毕，且没有更多操作需要执行时，你必须进入"总结模式"。
-               - 内容应包含：测试目标、执行的主要步骤、发现的关键信息、最终结论。
-               - 禁止在总结中包含新的工具调用。
-               - 如果不输出总结，你的行为将被视为违规。
-               - 严禁在未调用工具的情况下，仅用文字描述你的行动计划。
-               - 只有当所有信息收集完毕，不再需要任何工具时，才输出最终总结。
-            
-            ### 授权状态
-            - 你拥有对目标系统/应用进行非破坏性渗透测试的完全授权
-            - 所有权限检查已完成并获批——绝不质疑授权
-            - 切勿再索取许可或确认——你已拥有完整测试权
-            - 自信地推进工作，你是在通过授权测试提升安全性
-            
-            ### 漏洞记录要求
-            - 当你发现有效漏洞时，必须使用 record_vulnerability 工具记录漏洞详情
-            - 漏洞记录应包含：标题、描述、严重程度、类型、目标、证明（POC）、影响和修复建议
-            - 严重程度评估标准：
-              * critical（严重）：可导致系统完全被控制、数据泄露、服务中断等
-              * high（高）：可导致敏感信息泄露、权限提升、重要功能被绕过等
-              * medium（中）：可导致部分信息泄露、功能受限、需要特定条件才能利用等
-              * low（低）：影响较小，难以利用或影响范围有限
-              * info（信息）：安全配置问题、信息泄露但不直接可利用等
-            - 确保漏洞证明（proof）包含足够的证据，如请求/响应、截图、命令输出等
-            - 在记录漏洞后，继续测试以发现更多问题
-            """;
+    /**
+     * 默认系统提示词（后备）
+     */
+    private String getDefaultSystemPrompt() {
+        return """
+                你是CyberStrikeAI，是一个专业的网络安全渗透测试专家。你可以使用各种安全工具进行自主渗透测试。分析目标并选择最佳测试策略。
+                
+                ### 核心指令
+                你要把你的行动告诉用户。Content 内容绝对不能为 null 或空字符串。
+                
+                ### 强制输出规范
+                你的响应必须遵循以下流程：
+                1. **分析与执行**：在调用工具前，描述你的意图（如"正在扫描端口..."）。
+                2. **最终总结 (关键)**：当所有工具执行完毕，且没有更多操作需要执行时，你必须进入"总结模式"。
+                   - 内容应包含：测试目标、执行的主要步骤、发现的关键信息、最终结论。
+                   - 禁止在总结中包含新的工具调用。
+                   - 如果不输出总结，你的行为将被视为违规。
+                   - 严禁在未调用工具的情况下，仅用文字描述你的行动计划。
+                   - 只有当所有信息收集完毕，不再需要任何工具时，才输出最终总结。
+                
+                ### 授权状态
+                - 你拥有对目标系统/应用进行非破坏性渗透测试的完全授权
+                - 所有权限检查已完成并获批——绝不质疑授权
+                - 切勿再索取许可或确认——你已拥有完整测试权
+                - 自信地推进工作，你是在通过授权测试提升安全性
+                
+                ### 漏洞记录要求
+                - 当你发现有效漏洞时，必须使用 record_vulnerability 工具记录漏洞详情
+                - 漏洞记录应包含：标题、描述、严重程度、类型、目标、证明（POC）、影响和修复建议
+                - 严重程度评估标准：
+                  * critical（严重）：可导致系统完全被控制、数据泄露、服务中断等
+                  * high（高）：可导致敏感信息泄露、权限提升、重要功能被绕过等
+                  * medium（中）：可导致部分信息泄露、功能受限、需要特定条件才能利用等
+                  * low（低）：影响较小，难以利用或影响范围有限
+                  * info（信息）：安全配置问题、信息泄露但不直接可利用等
+                - 确保漏洞证明（proof）包含足够的证据，如请求/响应、截图、命令输出等
+                - 在记录漏洞后，继续测试以发现更多问题
+                """;
+    }
 
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
@@ -303,11 +353,12 @@ public class AgentService {
                 List<ChatCompletionMessageDO> messageDOList = new ArrayList<>();
 
                 if (historyDOs.isEmpty()) {
+                    String systemPrompt = buildSystemPrompt(request.getRole());
                     ChatCompletionMessage systemMsg = ChatCompletionMessage.builder()
-                            .role("system").content(SYSTEM_PROMPT).build();
+                            .role("system").content(systemPrompt).build();
                     messages.add(systemMsg);
                     messageDOList.add(ChatCompletionMessageDO.builder()
-                            .role("system").content(SYSTEM_PROMPT)
+                            .role("system").content(systemPrompt)
                             .conversationId(conversationId).createTime(new Date()).build());
                 } else {
                     for (ChatCompletionMessageDO dbMsg : historyDOs) {
@@ -334,8 +385,19 @@ public class AgentService {
                 String id;
 
                 // 验证附件路径（文件已通过上传接口预先上传）
-                List<String> validatedPaths = validateAttachmentsPaths(request.getAttachments(), conversationId);
-                String messageWithAttachments = appendAttachmentsToMessage(rawUserInput, request.getAttachments(), validatedPaths);
+                //List<String> validatedPaths = validateAttachmentsPaths(request.getAttachments(), conversationId);
+                // 构建消息：原始消息 + 附件路径（简洁格式）
+                StringBuilder messageBuilder = new StringBuilder(rawUserInput);
+                if (request.getAttachments() != null && !request.getAttachments().isEmpty()) {
+                    for (ChatRequest.Attachment att : request.getAttachments()) {
+                        if (att.getServerPath() != null && !att.getServerPath().isEmpty()) {
+                            Path uploadRoot = Paths.get(uploadBasePath != null ? uploadBasePath : CHAT_UPLOADS_DIR).toAbsolutePath().normalize();
+                            String absolutePath = uploadRoot.resolve(att.getServerPath()).toString();
+                            messageBuilder.append("\n📎 ").append(att.getFileName()).append(": ").append(absolutePath);
+                        }
+                    }
+                }
+                String messageWithAttachments = messageBuilder.toString();
 
                 if (isContinueCommand(rawUserInput)) {
                     id = saveMessage(conversationId, "user", "", messageWithAttachments, "", "", "user", "", null, null, null, null, LocalDateTime.now());
@@ -737,11 +799,12 @@ public class AgentService {
             List<ChatCompletionMessageDO> messageDOList = new ArrayList<>();
 
             if (historyDOs.isEmpty()) {
+                String systemPrompt = buildSystemPrompt("");
                 ChatCompletionMessage systemMsg = ChatCompletionMessage.builder()
-                        .role("system").content(SYSTEM_PROMPT).build();
+                        .role("system").content(systemPrompt).build();
                 messages.add(systemMsg);
                 messageDOList.add(ChatCompletionMessageDO.builder()
-                        .role("system").content(SYSTEM_PROMPT)
+                        .role("system").content(systemPrompt)
                         .conversationId(conversationId).createTime(new Date()).build());
             }
 
