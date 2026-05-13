@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Refresh, Delete, View, Timer, Check, Close } from '@element-plus/icons-vue';
+import request from '@/utils/request';
 
 interface ToolExecution {
   id: string;
@@ -40,9 +41,9 @@ const filteredExecutions = computed(() => {
 const loadExecutions = async () => {
   loading.value = true;
   try {
-    const res = await fetch('/api/monitor?limit=100');
-    if (res.ok) {
-      executions.value = await res.json();
+    const res = await request('/api/monitor?limit=100');
+    if (res.status === 200) {
+      executions.value = res.data;
     }
   } catch (e) {
     ElMessage.error('加载执行记录失败');
@@ -53,9 +54,9 @@ const loadExecutions = async () => {
 
 const loadStats = async () => {
   try {
-    const res = await fetch('/api/monitor/stats');
-    if (res.ok) {
-      stats.value = await res.json();
+    const res = await request('/api/monitor/stats');
+    if (res.status === 200) {
+      stats.value = res.data;
     }
   } catch (e) {
     console.error('Failed to load stats');
@@ -70,8 +71,8 @@ const handleViewDetails = (exec: ToolExecution) => {
 const handleClearAll = async () => {
   try {
     await ElMessageBox.confirm('确定要清空所有执行记录吗?', '警告', { type: 'warning' });
-    const res = await fetch('/api/monitor/executions', { method: 'DELETE' });
-    if (res.ok) {
+    const res = await request('/api/monitor/executions', { method: 'DELETE' });
+    if (res.status === 200) {
       ElMessage.success('已清空');
       loadExecutions();
       loadStats();

@@ -13,6 +13,7 @@ import { Terminal } from '@xterm/xterm';
 import { onMounted, ref, useTemplateRef, watch } from 'vue';
 import { Connection } from './Index.vue';
 import { FitAddon } from '@xterm/addon-fit';
+import request from '@/utils/request';
 
 const { connection } = defineProps<{
   connection: Connection
@@ -97,20 +98,19 @@ const runQuickCommand = async (cmd: string) => {
 // 调用后端执行命令
 const execWebshellCommand = async (command: string) => {
   const conn = connection;
-  const res = await fetch('/api/webshell/exec', {
+  const res = await request('/api/webshell/exec', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+    data: {
       url: conn.url,
       password: conn.password || '',
       type: conn.type || 'php',
       method: (conn.method || 'post').toLowerCase(),
       cmd_param: conn.cmdParam || '',
       command: command
-    })
+    }
   });
-  if (res.ok) {
-    const data = await res.json();
+  if (res.status === 200) {
+    const data = res.data;
     if (data.ok) {
       return data.output || '';
     }

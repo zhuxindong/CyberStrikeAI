@@ -94,6 +94,7 @@ import dayjs from 'dayjs';
 import McpCallDialog from './McpCallDialog.vue';
 import { debounce } from '@/utils/debounce';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import request from '@/utils/request';
 
 interface Stats {
   total: number;
@@ -175,9 +176,9 @@ onMounted(() => {
 });
 
 const getStats = async () => {
-  const res = await fetch('/api/mcp/state');
-  if (res.ok) {
-    const result: CallStats[] = await res.json();
+  const res = await request('/api/mcp/state');
+  if (res.status === 200) {
+    const result: CallStats[] = res.data;
     stats.value = {
       total: 0,
       totalSuccess: 0,
@@ -203,19 +204,21 @@ const getStats = async () => {
 };
 
 const getTableData = async () => {
-  let query = `page=${currentPage.value}&size=10`;
-  if (toolName.value) {
-    query += `&toolName=${toolName.value}`;
-  }
-  if (toolName.value) {
-    query += `&status=${currentStatus.value}`;
-  }
-  const res = await fetch(`/api/mcp/executions?${query}`);
-  if (res.ok) {
+  const res = await request({
+    url: '/api/mcp/executions',
+    method: 'get',
+    params: {
+      page: currentPage.value,
+      size: 10,
+      toolName: toolName.value,
+      status: currentStatus.value
+    }
+  });
+  if (res.status === 200) {
     const result: {
       list: TableItem[],
       total: number
-    } = await res.json();
+    } = res.data;
     const statusMap: any = {
       success: '成功',
       running: '执行中',
@@ -250,8 +253,8 @@ const batchDelete = async () => {
     const ids: string[] = selectedRows.value.map(row => {
       return `id=${row.id}`;
     });
-    const res = await fetch(`/api/mcp/delete?${ids.join('&')}`);
-    if (res.ok) {
+    const res = await request(`/api/mcp/delete?${ids.join('&')}`);
+    if (res.status === 200) {
       ElMessage.success('删除成功');
       selectedRows.value = [];
       getStats();
@@ -288,8 +291,8 @@ const deleteRow = async (row: TableItem) => {
     type: 'error'
   });
   if (action === 'confirm') {
-    const res = await fetch(`/api/mcp/delete?id=${row.id}`);
-    if (res.ok) {
+    const res = await request(`/api/mcp/delete?id=${row.id}`);
+    if (res.status === 200) {
       ElMessage.success('删除成功');
       getStats();
       getTableData();

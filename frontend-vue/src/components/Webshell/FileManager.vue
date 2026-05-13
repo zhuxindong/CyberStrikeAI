@@ -73,6 +73,7 @@ import { computed, ref, useTemplateRef, watch } from 'vue';
 import { Connection } from './Index.vue';
 import { ElInput, ElMessage, ElMessageBox, TableInstance } from 'element-plus';
 import { parseReponse, parseWebshellListItems } from "./Parser";
+import request from '@/utils/request';
 
 interface File {
   name: string;
@@ -330,16 +331,15 @@ const invokeFileop: (config: any) => Promise<string> = async (config: any) => {
   if (config.path) {
     config.path = config.path.replace(/^\//, '');
   }
-  const res = await fetch('/api/webshell/fileop', {
+  const res = await request('/api/webshell/fileop', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+    data: {
       ...config,
       ...connection
-    })
+    }
   });
-  if (res.ok) {
-    const data = await res.json();
+  if (res.status === 200) {
+    const data = res.data;
     if (!data.ok) {
       throw new Error(data.error);
     }

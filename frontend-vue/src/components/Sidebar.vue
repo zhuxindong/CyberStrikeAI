@@ -4,6 +4,7 @@ import { Plus, ChatDotRound, Delete, Star, StarFilled, Search } from '@element-p
 import ConversationStore from "@/store/Conversation";
 import { storeToRefs } from 'pinia';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import request from '@/utils/request';
 
 export interface Conversation {
   id: string;
@@ -21,9 +22,9 @@ const searchQuery = ref('');
 const fetchConversations = async () => {
   loading.value = true;
   try {
-    const response = await fetch('/api/conversations');
-    if (response.ok) {
-      conversations.value = await response.json();
+    const response = await request('/api/conversations');
+    if (response.status === 200) {
+      conversations.value = response.data;
     }
   } catch (error) {
     console.error('Failed to fetch conversations:', error);
@@ -34,13 +35,12 @@ const fetchConversations = async () => {
 
 const createConversation = async () => {
   try {
-    const response = await fetch('/api/conversations', {
+    const response = await request('/api/conversations', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: '新对话' })
+      data: { title: '新对话' }
     });
-    if (response.ok) {
-      const newConv = await response.json();
+    if (response.status === 200) {
+      const newConv = response.data;
       conversationId.value = newConv.id;
       fetchConversations();
     }
@@ -55,8 +55,8 @@ const deleteConversation = async (id: string) => {
   });
   if (action === 'confirm') {
     try {
-      const response = await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
-      if (response.ok) {
+      const response = await request(`/api/conversations/${id}`, { method: 'DELETE' });
+      if (response.status === 200) {
         conversations.value = conversations.value.filter(c => c.id !== id);
         ElMessage.success('删除成功');
       }
@@ -69,12 +69,11 @@ const deleteConversation = async (id: string) => {
 
 const togglePin = async (conv: Conversation) => {
   try {
-    const response = await fetch(`/api/conversations/${conv.id}/pinned`, {
+    const response = await request(`/api/conversations/${conv.id}/pinned`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pinned: !conv.pinned })
+      data: { pinned: !conv.pinned }
     });
-    if (response.ok) {
+    if (response.status === 200) {
       conv.pinned = !conv.pinned;
     }
   } catch (error) {

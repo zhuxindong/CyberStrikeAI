@@ -3,6 +3,7 @@ import { ref, onMounted, useTemplateRef } from 'vue';
 import { dayjs, ElMessage, ElMessageBox, FormContext, FormRules, SelectOptionProps } from 'element-plus';
 import { Refresh, Plus, Delete, Edit } from '@element-plus/icons-vue';
 import { debounce } from '@/utils/debounce';
+import request from '@/utils/request';
 
 interface KnowledgeStats {
   catogoryCount: number;
@@ -60,13 +61,17 @@ const currentItem = ref<KnowledgeItem>({
 
 const loadItems = async () => {
   loading.value = true;
-  let query = '?';
-  query += `category=${currentCategory.value || ''}`;
-  query += `&search=${searchQuery.value}`;
-  const res = await fetch(`/api/knowledge/items${query}`);
+  const res = await request({
+    url: '/api/knowledge/items',
+    method: 'get',
+    params: {
+      category: currentCategory.value || '',
+      search: searchQuery.value
+    }
+  });
   loading.value = false;
-  if (res.ok) {
-    const data = await res.json();
+  if (res.status === 200) {
+    const data = res.data;
     if (data.categories instanceof Array) {
       categories.value = data.categories;
     } else {
@@ -92,17 +97,20 @@ const loadItems = async () => {
 };
 const debouncedSearch = debounce(loadItems, 300);
 const loadItemDetail = async (id: string) => {
-  const res = await fetch(`/api/knowledge/items/${id}`);
-  if (res.ok) {
-    const data = await res.json();
+  const res = await request(`/api/knowledge/items/${id}`);
+  if (res.status === 200) {
+    const data = res.data;
     currentItem.value = data;
   }
 };
 
 const handleRebuildIndex = async () => {
-  const res = await fetch('/api/knowledge/index', { method: 'POST' });
-  if (res.ok) {
-    const data = await res.json();
+  const res = await request({
+    url: '/api/knowledge/index',
+    method: 'POST'
+  });
+  if (res.status === 200) {
+    const data = res.data;
     ElMessage.success(data.message);
   } else {
     ElMessage.error('重建索引失败');
@@ -129,8 +137,11 @@ const handleDelete = async (id: string) => {
     type: 'warning'
   });
   
-  const res = await fetch(`/api/knowledge/items/${id}`, { method: 'DELETE' });
-  if (res.ok) {
+  const res = await request({
+    url: `/api/knowledge/items/${id}`,
+    method: 'DELETE'
+   });
+  if (res.status === 200) {
     ElMessage.success('删除成功');
     loadItems();
   } else {
@@ -146,13 +157,13 @@ const handleSave = async () => {
   const url = isEdit.value ? `/api/knowledge/items/${currentItem.value.id}` : '/api/knowledge/items';
   const method = isEdit.value ? 'PUT' : 'POST';
   
-  const res = await fetch(url, {
-    method: method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(currentItem.value)
+  const res = await request({
+    url,
+    method,
+    data: currentItem.value
   });
   
-  if (res.ok) {
+  if (res.status === 200) {
     ElMessage.success(isEdit.value ? '修改成功' : '添加成功');
     dialogVisible.value = false;
     loadItems();

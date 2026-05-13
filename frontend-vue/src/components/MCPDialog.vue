@@ -51,6 +51,7 @@
 import { ElMessage } from "element-plus";
 import { ref, watch } from "vue";
 import { McpServer } from "./McpView.vue";
+import request from "@/utils/request";
 
 const props = defineProps<{
   visible: boolean;
@@ -175,23 +176,21 @@ const confirm = async () => {
     return;
   }
   const { isEdit } = props;
-  if (isEdit) {
-    const parsed = JSON.parse(json.value);
-    if (!parsed[props.serverInfo.name]) {
-      ElMessage.error(`JSON配置必须包含${props.serverInfo.name}`);
-      return;
-    }
+  const parsed: any = JSON.parse(json.value);;
+  if (isEdit && !parsed[props.serverInfo.name]) {
+    ElMessage.error(`JSON配置必须包含${props.serverInfo.name}`);
+    return;
   }
   const url = '/api/mcp/servers';
 
   loading.value = true;
-  const res = await fetch(url, {
+  const res = await request({
+    url,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: json.value
+    data: parsed
   });
 
-  if (res.ok) {
+  if (res.status === 200) {
     ElMessage.success(isEdit ? '更新成功' : '添加成功');
     emits('loadServers');
     onClose();

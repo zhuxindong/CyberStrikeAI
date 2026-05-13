@@ -100,6 +100,7 @@ import { BatchTask, BatchQueue } from './BatchQueueView.vue';
 import { dayjs, ElMessage, ElMessageBox, FormContext, FormRules } from 'element-plus';
 import { useRouter } from 'vue-router';
 import ChatStore from "@/store/Chat";
+import request from '@/utils/request';
 
 
 const props = defineProps<{
@@ -183,9 +184,9 @@ const onClose = () => {
 };
 
 const getBatchQueueInfo = async () => {
-  const res = await fetch(`/api/batch-tasks/${props.batchQueueId}`);
-  if (res.ok) {
-    const response: BatchQueue = await res.json();
+  const res = await request(`/api/batch-tasks/${props.batchQueueId}`);
+  if (res.status == 200) {
+    const response: BatchQueue = res.data;
     const queueStatusMap: Record<string, Record<'label' | 'elType', string>> = store.queueStatusMap;
     const { label, elType } = queueStatusMap[response.status] || {};
     response.statusLabel = label;
@@ -232,8 +233,11 @@ onBeforeUnmount(() => {
 
 // 执行队列
 const startQueue = async (id: string) => {
-  const res = await fetch(`/api/batch-tasks/${id}/start`, { method: 'POST' });
-  if (res.ok) {
+  const res = await request({
+    url: `/api/batch-tasks/${id}/start`,
+    method: 'POST'
+  });
+  if (res.status == 200) {
     ElMessage.success('已开始执行');
     await getBatchQueueInfo();
     startIntervalRefresh();
@@ -244,8 +248,11 @@ const startQueue = async (id: string) => {
 
 // 暂停队列
 const puaseQueue = async (id: string) => {
-  const res = await fetch(`/api/batch-tasks/${id}/cancel`, { method: 'POST' });
-  if (res.ok) {
+  const res = await request({
+    url: `/api/batch-tasks/${id}/cancel`, 
+    method: 'POST'
+  });
+  if (res.status === 200) {
     getBatchQueueInfo();
     ElMessage.success('已请求暂停');
   } else {
@@ -267,20 +274,18 @@ const deleteQueue = (id: string) => {
 const addTask = async () => {
   const result = await formRef.value?.validateField();
   if (result) {
-    const response = await fetch('/api/batch-tasks/task', {
+    const res = await request({
+      url: '/api/batch-tasks/task',
       method: 'POST',
-      headers: {
-        'Content-type': 'application/json'
-      },
-      body: JSON.stringify({
+      data: {
         message: form.value.taskMessage,
         queue: {
           id: batchQueueInfo.value.id
         }
-      })
+      }
     });
-    if (response.ok) {
-      const task = await response.json();
+    if (res.status === 200) {
+      const task = res.data;
       batchQueueInfo.value.tasks.push(task);
       taskVisible.value = false;
       getBatchQueueInfo();
@@ -303,17 +308,15 @@ const showTask = (task?: BatchTask) => {
 const editTask = async () => {
   const result = await formRef.value?.validateField();
   if (result) {
-    const { ok } = await fetch(`/api/batch-tasks/task/${currentTask.value?.id}`, {
+    const { status } = await request({
+      url: `/api/batch-tasks/task/${currentTask.value?.id}`,
       method: 'PUT',
-      headers: {
-        'Content-type': 'application/json'
-      },
-      body: JSON.stringify({
+      data: {
         id: currentTask.value?.id,
         message: form.value.taskMessage
-      })
+      }
     });
-    if (ok) {
+    if (status === 200) {
       taskVisible.value = false;
       getBatchQueueInfo();
       ElMessage.success('修改任务成功');
@@ -328,13 +331,11 @@ const deleteTask = async (id: string) => {
   await ElMessageBox.confirm('确定要删除这个任务吗', '删除任务', {
     type: 'error'
   });
-  const { ok } = await fetch(`/api/batch-tasks/task/${id}`, {
-    method: 'DELETE',
-    headers: {
-      'Content-type': 'application/json'
-    }
+  const { status } = await request({
+    url: `/api/batch-tasks/task/${id}`,
+    method: 'DELETE'
   });
-  if (ok) {
+  if (status === 200) {
     getBatchQueueInfo();
     ElMessage.success('删除任务成功');
   } else {

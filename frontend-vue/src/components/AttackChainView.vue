@@ -2,6 +2,7 @@
 import { ref, onMounted, watch, computed } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Refresh, Close, FullScreen, Warning, CircleCheck, Aim } from '@element-plus/icons-vue';
+import request from '@/utils/request';
 
 interface AttackChainNode {
   id: string;
@@ -118,9 +119,9 @@ const loadAttackChain = async () => {
   error.value = '';
   
   try {
-    const response = await fetch(`/api/attack-chain/${props.conversationId}`);
-    if (response.ok) {
-      const data = await response.json();
+    const response = await request(`/api/attack-chain/${props.conversationId}`);
+    if (response.status === 200) {
+      const data = response.data;
       nodes.value = data.nodes || [];
       edges.value = data.edges || [];
       
@@ -148,12 +149,12 @@ const regenerateChain = async () => {
   error.value = '';
   
   try {
-    const response = await fetch(`/api/attack-chain/${props.conversationId}/regenerate`, {
+    const response = await request(`/api/attack-chain/${props.conversationId}/regenerate`, {
       method: 'POST'
     });
     
-    if (response.ok) {
-      const data = await response.json();
+    const data = response.data;
+    if (response.status === 200) {
       nodes.value = data.nodes || [];
       edges.value = data.edges || [];
       ElMessage.success('攻击链生成完成');
@@ -162,8 +163,7 @@ const regenerateChain = async () => {
         error.value = '对话中没有工具执行记录，无法生成攻击链';
       }
     } else {
-      const errData = await response.json();
-      error.value = errData.error || '生成失败';
+      error.value = data.error || '生成失败';
       ElMessage.error(error.value);
     }
   } catch (e) {

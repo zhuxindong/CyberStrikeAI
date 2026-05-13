@@ -101,7 +101,6 @@ const getAgentInfo = async (filename: string) => {
   if (res.status === 200) {
     form.value = res.data;
     form.value.maxIterations = form.value.maxIterations || 0;
-    form.value.orchestrator = form.value.kind === 'orchestrator';
   }
 };
 
@@ -122,25 +121,27 @@ const confirm = async () => {
   const valid = await formRef.value?.validateField();
   if (valid) {
     const { filename, isEdit } = props;
-    let re, msgPrefix;
-    const params = Object.assign({}, form.value);
+    let req, msgPrefix;
+    const params: any = Object.assign({}, form.value);
+    params.agentId = params.id;
+    delete params.id;
     delete params.toolsAsList;
     if (isEdit) {
-      re = request({
+      req = request({
         url: `/api/multi-agent/markdown-agents/${filename}`,
         method: 'put',
         data: params
       });
       msgPrefix = '修改';
     } else {
-      re = request({
+      req = request({
         url: `/api/multi-agent/markdown-agents`,
         method: 'post',
         data: params
       });
       msgPrefix = '新增';
     }
-    const res = await re;
+    const res = await req;
     if (res.status === 200) {
       ElMessage.success(`${msgPrefix}成功`);
       onClose();

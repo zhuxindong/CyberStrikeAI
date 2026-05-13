@@ -187,6 +187,7 @@
 </template>
 
 <script lang="ts" setup>
+import request from '@/utils/request';
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
@@ -286,9 +287,9 @@ onMounted(() => {
 
 // 任务
 const getTaskInfo = async () => {
-  const res = await fetch('/api/batch-tasks/staus');
-  if (res.ok) {
-    const data = await res.json();
+  const res = await request('/api/batch-tasks/staus');
+  if (res.status === 200) {
+    const data = res.data;
     ['running', 'paused', 'pending', 'completed'].forEach(key => {
       const stage = taskInfo.value[key];
       stage.count = data[key];
@@ -301,9 +302,9 @@ const getTaskInfo = async () => {
 
 // 漏洞
 const getVulnInfo = async () => {
-  const res = await fetch('/api/vulnerabilities/stats');
-  if (res.ok) {
-    let data = await res.json();
+  const res = await request('/api/vulnerabilities/stats');
+  if (res.status === 200) {
+    let data = res.data;
     data = data.bySeverity;
     let total = 0;
     Object.values(data).forEach((item) => {
@@ -320,9 +321,9 @@ const getVulnInfo = async () => {
 
 // 工具
 const getToolInfo = async () => {
-  const res = await fetch('/api/mcp/staus');
-  if (res.ok) {
-    const data = await res.json();
+  const res = await request('/api/mcp/staus');
+  if (res.status === 200) {
+    const data = res.data;
     const number = data.number;
     toolInfo.value = number;
     const successRate = Math.floor(number.successRate);
@@ -342,9 +343,9 @@ const getToolInfo = async () => {
 
 // 知识
 const getKnowledgeInfo = async () => {
-  const res = await fetch('/api/knowledge/items');
-  if (res.ok) {
-    const data = await res.json();
+  const res = await request('/api/knowledge/items');
+  if (res.status === 200) {
+    const data = res.data;
     let categoryCount = data.categories.length, knowledgeCount = 0;
     data.categories.forEach((cat: any) => {
       knowledgeCount += cat.itemCount;
@@ -362,9 +363,9 @@ const getKnowledgeInfo = async () => {
 
 // Skills
 const getSkillInfo = async () => {
-  const res = await fetch('/api/skills/stats');
-  if (res.ok) {
-    const data = await res.json();
+  const res = await request('/api/skills/stats');
+  if (res.status === 200) {
+    const data = res.data;
     const { total_calls, total_skills } = data;
     let status = '', tagType = 'info';
     if (total_calls === 0) {

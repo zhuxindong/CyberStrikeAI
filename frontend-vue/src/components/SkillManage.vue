@@ -34,6 +34,7 @@ import { onMounted, ref } from 'vue';
 import SkillDialog from "./SkillDialog.vue";
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { debounce } from '@/utils/debounce';
+import request from '@/utils/request';
 
 export interface Skill {
   name: string;
@@ -42,6 +43,7 @@ export interface Skill {
   file_size: number;
   mod_time: string;
   content: string;
+  enabled: boolean;
 }
 
 const keyword = ref('');
@@ -61,13 +63,17 @@ const getSkillList = async (reset: boolean = false) => {
   if (reset) {
     pageNum.value = 1;
   }
-  let query = '';
-  query += `page=${pageNum.value}`;
-  query += `&size=${pageSize.value}`;
-  query += `&search=${keyword.value}`;
-  const res = await fetch(`/api/skills?${query}`);
-  if (res.ok) {
-    const data = await res.json();
+  const res = await request({
+    url: '/api/skills',
+    method: 'GET',
+    params: {
+      page: pageNum.value,
+      size: pageSize.value,
+      search: keyword.value
+    }
+  });
+  if (res.status === 200) {
+    const data = res.data;
     skillList.value = data.skills;
     total.value = data.total;
   }
@@ -97,13 +103,10 @@ const deleteSkill = async (name: string) => {
   ElMessageBox.confirm('确定删除改Skill吗？此操作不能撤销。', '删除SKill', {
     type: 'warning'
   }).then(async () => {
-    const res = await fetch(`/api/skills/${name}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-type': 'application/json'
-      }
+    const res = await request(`/api/skills/${name}`, {
+      method: 'DELETE'
     });
-    if (res.ok) {
+    if (res.status === 200) {
       ElMessage.success('删除成功');
       getSkillList(false);
     } else {

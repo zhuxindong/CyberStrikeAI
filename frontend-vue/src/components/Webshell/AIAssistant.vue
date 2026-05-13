@@ -53,6 +53,7 @@ import { TimelineItem, Message } from '../ChatWindow.vue';
 import { dayjs, ElMessage, ElMessageBox } from 'element-plus';
 import { scrollToBottom, getTitleByType, streamChat } from '@/utils/chatService';
 import { Connection } from './Index.vue';
+import request from '@/utils/request';
 
 const { connection } = defineProps<{
   connection: Connection
@@ -79,9 +80,9 @@ onMounted(async () => {
 
 
 const getConversations = async () => {
-  const res = await fetch(`/api/webshell/connections/${connection.id}/conversations`);
-  if (res.ok) {
-    const data = await res.json();
+  const res = await request(`/api/webshell/connections/${connection.id}/conversations`);
+  if (res.status === 200) {
+    const data = res.data;
     conversations.value = data.map((item: Conversation) => {
       item.updatedAt = dayjs(item.updatedAt).format('HH:mm');
       return item;
@@ -91,9 +92,9 @@ const getConversations = async () => {
 
 const selectConversation = async (id: string) => {
   currentConversationId.value = id;
-  const res = await fetch(`/api/conversations/${id}`);
-  if (res.ok) {
-    const data = await res.json();
+  const res = await request(`/api/conversations/${id}`);
+  if (res.status === 200) {
+    const data = res.data;
     const rawMessages = data.messages;
     if (rawMessages && Array.isArray(rawMessages)) {
       messages.splice(0);
@@ -135,8 +136,8 @@ const deleteConversation = async (id: string) => {
     type: 'warning',
   });
   if (data === 'confirm') {
-    const response = await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
-    if (response.ok) {
+    const response = await request(`/api/conversations/${id}`, { method: 'DELETE' });
+    if (response.status === 200) {
       if (currentConversationId.value === id) {
         messages.splice(0);
         currentConversationId.value = '';

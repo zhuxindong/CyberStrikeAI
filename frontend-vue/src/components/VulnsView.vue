@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Refresh, Search, Edit, Delete, Link } from '@element-plus/icons-vue';
+import request from '@/utils/request';
 
 interface Vulnerability {
   id: string;
@@ -103,9 +104,20 @@ const loadVulnerabilities = async (reset: boolean = false) => {
     query += `&id=${idQuery.value}`;
     query += `&conversationId=${conversationIdQuery.value}`;
 
-    const res = await fetch(`/api/vulnerabilities?${query}`);
-    if (res.ok) {
-      const data = await res.json();
+    const res = await request({
+      url: '/api/vulnerabilities',
+      method: 'GET',
+      params: {
+        page: pageNum.value,
+        size: pageSize.value,
+        severity: filterSeverity.value,
+        status: filterStatus.value,
+        id: idQuery.value,
+        conversationId: conversationIdQuery.value
+      }
+    });
+    if (res.status === 200) {
+      const data = res.data;
       vulnerabilities.value = data.vulnerabilities || [];
       total.value = data.total;
     }
@@ -122,9 +134,9 @@ const reset = () => {
 
 const loadStats = async () => {
   try {
-    const res = await fetch('/api/vulnerabilities/stats');
-    if (res.ok) {
-      stats.value = await res.json();
+    const res = await request('/api/vulnerabilities/stats');
+    if (res.status === 200) {
+      stats.value = res.data;
     }
   } catch (e) {
     console.error('Failed to load stats');
@@ -239,8 +251,8 @@ const handleEdit = (vuln: Vulnerability) => {
 const handleDelete = async (id: string) => {
   try {
     await ElMessageBox.confirm('确定要删除此漏洞吗?', '警告', { type: 'warning' });
-    const res = await fetch(`/api/vulnerabilities/${id}`, { method: 'DELETE' });
-    if (res.ok) {
+    const res = await request(`/api/vulnerabilities/${id}`, { method: 'DELETE' });
+    if (res.status === 200) {
       ElMessage.success('删除成功');
       loadVulnerabilities();
       loadStats();
@@ -265,13 +277,12 @@ const handleSave = async () => {
     const url = isEdit.value ? `/api/vulnerabilities/${currentVuln.value.id}` : '/api/vulnerabilities';
     const method = isEdit.value ? 'PUT' : 'POST';
     
-    const res = await fetch(url, {
+    const res = await request(url, {
       method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(currentVuln.value)
+      data: currentVuln.value
     });
     
-    if (res.ok) {
+    if (res.status === 200) {
       ElMessage.success(isEdit.value ? '更新成功' : '创建成功');
       dialogVisible.value = false;
       loadVulnerabilities();

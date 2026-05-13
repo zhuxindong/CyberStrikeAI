@@ -125,6 +125,7 @@
 </template>
 
 <script lang="ts" setup>
+import request from '@/utils/request';
 import { dayjs, ElMessage, ElMessageBox } from 'element-plus';
 import { onMounted, ref } from 'vue';
 
@@ -172,13 +173,16 @@ const logInfo = ref<RetrievalLog>({
 });
 
 const getLogs = async () => {
-  let query = '?';
-  query += `conversationId=${conversationId.value}`;
-  query += `&messageId=${messageId.value}`;
-
-  const res = await fetch(`/api/knowledge/retrieval-logs${query}`);
-  if (res.ok) {
-    const data = await res.json();
+  const res = await request({
+    url: '/api/knowledge/retrieval-logs',
+    method: 'get',
+    params: {
+      conversationId: conversationId.value,
+      messageId: messageId.value
+    }
+  });
+  if (res.status === 200) {
+    const data = res.data;
     let total = 0, successLogs = 0, successRate = '', knowledgeItems = 0;
     total = data.logs.length;
     logs.value = data.logs.map((log: RetrievalLog) => {
@@ -230,10 +234,13 @@ const getRetrievedItems = async (ids: string[]) => {
   ids.forEach(id => {
     query += `ids=${id}&`;
   });
-  query = query.slice(0, -1)
-  const res = await fetch(`/api/knowledge/items/list${query}`);
-  if (res.ok) {
-    const data = await res.json();
+  query = query.slice(0, -1);
+  const res = await request({
+    url: `/api/knowledge/items/list${query}`,
+    method: 'get',
+  });
+  if (res.status === 200) {
+    const data = res.data;
     return data.map((item: any) => {
       item.preview = item.content.length > 200 ? item.content.slice(0, 200) + '...' : item.content;
       return item;
@@ -253,10 +260,10 @@ const deleteLog = async (id: string) => {
     type: 'warning'
   });
   if (action === 'confirm') {
-    const res = await fetch(`/api/knowledge/retrieval-logs/${id}`, {
+    const res = await request(`/api/knowledge/retrieval-logs/${id}`, {
       method: 'DELETE'
     });
-    if (res.ok) {
+    if (res.status === 200) {
       ElMessage.success('删除成功');
       getLogs();
     } else {

@@ -4,6 +4,7 @@ import { dayjs, ElMessage, ElMessageBox, FormContext, FormRules } from 'element-
 import { Plus } from '@element-plus/icons-vue';
 import BatchQueueDialog from './BatchQueueDialog.vue';
 import ChatStore from "@/store/Chat";
+import request from '@/utils/request';
 
 export interface BatchTask {
   id: string;
@@ -107,10 +108,13 @@ const batchQueueId = ref('');
 const store = ChatStore();
 
 const getRoles = async () => {
-  const res = await fetch('/api/roles');
-  if (res.ok) {
-    const response = await res.json();
-    roleOptions.value = response.map((r: any) => {
+  const res = await request({
+    url: '/api/roles'
+  });
+  if (res.status == 200) {
+    const response = res.data;
+    const roles = response.roles;
+    roleOptions.value = roles.map((r: any) => {
       return {
         label: r.name,
         value: r.name
@@ -135,10 +139,10 @@ const fetchQueues = async (reset: boolean = false) => {
     query += `&createdTo=${timeRange.value[1]}`;
   }
 
-  const res = await fetch(`/api/batch-tasks?${query}`);
-  if (res.ok) {
+  const res = await request(`/api/batch-tasks?${query}`);
+  if (res.status == 200) {
     const queueStatusMap: Record<string, Record<'label' | 'elType', string>> = store.queueStatusMap;
-    const response = await res.json();
+    const response = res.data;
     queues.value = response.data;
     total.value = response.total;
     queues.value.forEach(q => {
@@ -186,20 +190,19 @@ const handleCreate = () => {
 const handleSubmit = async () => {
   const valid = await formRef.value?.validateField();
   if (valid) {
-    const res = await fetch('/api/batch-tasks', {
+    const res = await request('/api/batch-tasks', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      data: {
         title: form.value.title,
         role: form.value.role,
         tasks: form.value.tasksText.split('\n').filter((t: string) => t.trim())
-      })
+      }
     });
 
-    if (res.ok) {
+    if (res.status === 200) {
       ElMessage.success('创建成功');
       dialogVisible.value = false;
-      const response = await res.json();
+      const response = res.data;
       batchQueueId.value = response.id;
       batchQueueDialogVisible.value = true;
       fetchQueues();
@@ -223,13 +226,10 @@ const confirmDeleteQueue = (id: string) => {
 };
 
 const deleteQueue = async (id: string) => {
-  const { ok } = await fetch(`/api/batch-tasks/${id}`, {
+  const { status } = await request(`/api/batch-tasks/${id}`, {
     method: 'DELETE',
-    headers: {
-      'Content-type': 'application/json'
-    }
   });
-  if (ok) {
+  if (status === 200) {
     fetchQueues();
     ElMessage.success('删除任务队列成功');
   } else {

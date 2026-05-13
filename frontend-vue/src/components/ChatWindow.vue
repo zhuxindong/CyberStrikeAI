@@ -114,17 +114,13 @@ const selectRole = (role: any) => {
 };
 
 const fetchRoles = async () => {
-  try {
-    const response = await fetch('/api/roles');
-    if (response.ok) {
-      roles.value = await response.json();
-      // Select default role if available
-      if (roles.value.length > 0 && !selectedRole.value) {
-        selectedRole.value = roles.value[0];
-      }
+  const res = await request('/api/roles');
+  if (res.status === 200) {
+    roles.value = res.data.roles;
+    // Select default role if available
+    if (roles.value.length > 0 && !selectedRole.value) {
+      selectedRole.value = roles.value[0];
     }
-  } catch (error) {
-    console.error('Failed to fetch roles:', error);
   }
 };
 
@@ -159,9 +155,9 @@ const filterTools = (str: string) => {
 const loadConversationHistory = async (conversationId: string) => {
   loading.value = true;
   try {
-    const response = await fetch(`/api/conversations/${conversationId}`);
-    if (response.ok) {
-      const data = await response.json();
+    const response = await request(`/api/conversations/${conversationId}`);
+    if (response.status === 200) {
+      const data = response.data;
       const rawMessages = data.messages;
       if (rawMessages && Array.isArray(rawMessages)) {
         messages.splice(0);
@@ -203,10 +199,10 @@ const loadConversationHistory = async (conversationId: string) => {
 let activeTaskInterval: NodeJS.Timeout | undefined;
 // 加载活跃任务
 const loadActiveTasks = async () => {
-  const res = await fetch('/api/conversations/tasks');
-  if (res.ok) {
+  const res = await request('/api/conversations/tasks');
+  if (res.status === 200) {
     const queueStatusMap: Record<string, Record<'label' | 'elType', string>> = chatStore.queueStatusMap;
-    const data = await res.json();
+    const data = res.data;
     activeTasks.value = data.map((item: ActiveTaskMessage) => {
       item.createdAt = dayjs(item.createdAt).format('YYYY-MM-DD HH:mm:ss');
       item.updatedAt = dayjs(item.updatedAt).format('YYYY-MM-DD HH:mm:ss');
@@ -484,12 +480,11 @@ const stopTask = async (taskId?: string) => {
   taskId = taskId || currentTaskId.value;
   if (!taskId) return;
   try {
-    const res = await fetch('/api/agent-loop/cancel', {
+    const res = await request('/api/agent-loop/cancel', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ task_id: taskId })
+      data: { task_id: taskId }
     });
-    if (res.ok) {
+    if (res.status === 200) {
       loadActiveTasks();
     } else {
       ElMessage.error('停止任务失败');
@@ -677,8 +672,8 @@ const renderMarkdown = (text: string | undefined) => {
                 </div>
                 <div class="role-item-content">
                   <div class="role-item-title">{{ role.name }}</div>
-                  <div class="role-item-desc" :title="role.systemPrompt">
-                    {{ role.systemPrompt.substring(0, 30) }}...
+                  <div class="role-item-desc" :title="role.userPrompt">
+                    {{ role.userPrompt.substring(0, 30) }}...
                   </div>
                 </div>
                 <div class="role-item-check" v-if="selectedRole?.id === role.id">

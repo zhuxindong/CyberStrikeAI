@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import MCPDialog from './MCPDialog.vue';
+import request from '@/utils/request';
 
 export interface Tool {
   name: string;
@@ -76,9 +77,9 @@ const loadTools = async () => {
     });
     const url = '/api/config/tools?' + query.join('&');
 
-    const res = await fetch(url);
-    if (res.ok) {
-      const data = await res.json();
+    const res = await request(url);
+    if (res.status === 200) {
+      const data = res.data;
       tools.value = data.tools || [];
       total.value = data.total;
       let page_enabled = 0, page_total = Math.min(pageSize.value, tools.value.length);
@@ -103,9 +104,9 @@ const loadTools = async () => {
 const loadServers = async () => {
   loading.value = true;
   try {
-    const res = await fetch('/api/mcp/servers');
-    if (res.ok) {
-      servers.value = await res.json();
+    const res = await request('/api/mcp/servers');
+    if (res.status === 200) {
+      servers.value = res.data;
     }
   } catch (e) {
     ElMessage.error('加载 MCP 服务器失败');
@@ -116,9 +117,9 @@ const loadServers = async () => {
 
 const loadStats = async () => {
   try {
-    const res = await fetch('/api/mcp/stats');
-    if (res.ok) {
-      MCPStats.value = await res.json();
+    const res = await request('/api/mcp/stats');
+    if (res.status === 200) {
+      MCPStats.value = res.data;
     }
   } catch (e) {
     console.error('Failed to load stats');
@@ -134,14 +135,11 @@ const saveSettings = async () => {
       enabled
     };
   });
-  const res = await fetch('/api/config/tools/update', {
+  const res = await request('/api/config/tools/update', {
     method: 'post',
-    headers: {
-      'Content-type': 'application/json'
-    },
-    body: JSON.stringify(body)
+    data: body
   });
-  if (res.ok) {
+  if (res.status === 200) {
     ElMessage.success('保存配置成功');
     loadTools();
     toolModifyCache.value = {};
@@ -212,8 +210,8 @@ const handleEditServer = (server: McpServer) => {
 const handleDeleteServer = async (id: string) => {
   try {
     await ElMessageBox.confirm('确定要删除此 MCP 服务器吗?', '警告', { type: 'warning' });
-    const res = await fetch(`/api/mcp/servers/${id}`, { method: 'DELETE' });
-    if (res.ok) {
+    const res = await request(`/api/mcp/servers/${id}`, { method: 'DELETE' });
+    if (res.status === 200) {
       ElMessage.success('删除成功');
       loadServers();
       loadStats();
@@ -225,8 +223,8 @@ const handleDeleteServer = async (id: string) => {
 
 const handleConnect = async (server: McpServer) => {
   try {
-    const res = await fetch(`/api/mcp/servers/${server.id}/connect`, { method: 'POST' });
-    if (res.ok) {
+    const res = await request(`/api/mcp/servers/${server.id}/connect`, { method: 'POST' });
+    if (res.status === 200) {
       ElMessage.success('连接成功');
       loadServers();
       loadStats();
@@ -240,8 +238,8 @@ const handleConnect = async (server: McpServer) => {
 
 const handleDisconnect = async (server: McpServer) => {
   try {
-    const res = await fetch(`/api/mcp/servers/${server.id}/disconnect`, { method: 'POST' });
-    if (res.ok) {
+    const res = await request(`/api/mcp/servers/${server.id}/disconnect`, { method: 'POST' });
+    if (res.status === 200) {
       ElMessage.success('已断开连接');
       loadServers();
       loadStats();

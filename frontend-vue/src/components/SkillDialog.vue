@@ -53,6 +53,7 @@
 import { ElMessage, FormContext, FormRules } from 'element-plus';
 import { computed, ref, useTemplateRef, watch } from 'vue';
 import { Skill } from './SkillManage.vue';
+import request from '@/utils/request';
 
 const props = defineProps<{
   visible: boolean;
@@ -68,7 +69,8 @@ const skillInfo = ref<Skill>({
   description: '',
   mod_time: '',
   content: '',
-  file_size: 0
+  file_size: 0,
+  enabled: false
 });
 const rules = ref<FormRules>({
   name: {
@@ -101,9 +103,9 @@ const title = computed(() => {
 
 const formRef = useTemplateRef<FormContext>('form');
 const getSkillInfo = async (name: string) => {
-  const res = await fetch(`/api/skills/${name}`);
-  if (res.ok) {
-    const data = await res.json();
+  const res = await request(`/api/skills/${name}`);
+  if (res.status === 200) {
+    const data = res.data;
     skillInfo.value = data.skill;
   }
 };
@@ -115,16 +117,12 @@ const confirm = async () => {
   const action = mode === 'add' ? '创建' : '修改';
   if (valid) {
     loading.value = true;
-    const res = await fetch(url, {
+    const res = await request(url, {
       method,
-      headers: {
-        'Content-type': 'application/json'
-      },
-      body: JSON.stringify(skillInfo.value)
-    }).finally(() => {
-      loading.value = false;
+      data: skillInfo.value
     });
-    if (res.ok) {
+    loading.value = false;
+    if (res.status === 200) {
       ElMessage.success(`${action}成功`);
       emits('update:visible', false);
       emits('refresh');

@@ -40,6 +40,7 @@
 </template>
 
 <script lang="ts" setup>
+import request from '@/utils/request';
 import { dayjs, TableColumnCtx } from 'element-plus';
 import { onMounted, ref } from 'vue';
 
@@ -88,9 +89,9 @@ const columns = ref<Partial<TableColumnCtx>[]>([
 const tableData = ref<SkillStat[]>([]);
 
 const getMonitorData = async () => {
-  const res = await fetch('/api/skills/stats');
-  if (res.ok) {
-    const data = await res.json();
+  const res = await request('/api/skills/stats');
+  if (res.status === 200) {
+    const data = res.data;
     let success = 0, failed = 0;
     const total = data.total_calls
     tableData.value = data.stats.map((stat: any) => {

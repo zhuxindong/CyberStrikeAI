@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { Tools, Refresh } from '@element-plus/icons-vue';
+import request from '@/utils/request';
 
 interface Tool {
   name: string;
@@ -14,9 +15,9 @@ const loading = ref(false);
 const fetchTools = async () => {
   loading.value = true;
   try {
-    const response = await fetch('/api/config/tools');
-    if (response.ok) {
-      tools.value = await response.json();
+    const response = await request('/api/config/tools');
+    if (response.status === 200) {
+      tools.value = response.data;
     }
   } catch (error) {
     console.error('Failed to fetch tools:', error);

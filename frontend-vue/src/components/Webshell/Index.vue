@@ -87,6 +87,7 @@ import VirtualTerminal from "./VirtualTerminal.vue";
 import FileManager from "./FileManager.vue";
 import AIAssistant from "./AIAssistant.vue";
 import { ElMessage, ElMessageBox, FormContext, FormRules } from "element-plus";
+import request from "@/utils/request";
 
 export interface Connection {
   id: string;
@@ -136,9 +137,9 @@ onMounted(() => {
 });
 
 const getConnections = async () => {
-  const res = await fetch('/api/webshell/connections');
-  if (res.ok) {
-    connections.value = await res.json();
+  const res = await request('/api/webshell/connections');
+  if (res.status === 200) {
+    connections.value = res.data;
   }
 };
 
@@ -167,10 +168,10 @@ const deleteConn = async (id: string) => {
     type: 'warning'
   });
   if (action == 'confirm') {
-    const res = await fetch(`/api/webshell/connections/${id}`, {
+    const res = await request(`/api/webshell/connections/${id}`, {
       method: 'DELETE'
     });
-    if (res.ok) {
+    if (res.status === 200) {
       if (activeConnection.value?.id === id) {
         activeConnection.value = undefined;
       }
@@ -188,20 +189,19 @@ const testConnection = async () => {
     return;
   }
   const { url, password, type, method, cmdParam } = form.value;
-  const res: any = await fetch('/api/webshell/exec', {
+  const res: any = await request('/api/webshell/exec', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+    data: {
       url,
       password,
       type,
       method,
       cmd_param: cmdParam,
       command: 'echo 1'
-    })
+    }
   });
-  if (res.ok) {
-    const data = await res.json();
+  if (res.status === 200) {
+    const data = res.data;
     if (data.ok) {
       ElMessage.success('连接成功');
     } else {
@@ -222,14 +222,11 @@ const confirm = async () => {
   const method = edit ? 'PUT' : 'POST';
   const action = edit ? '编辑' : '添加';
   const body = JSON.stringify(form.value);
-  const res = await fetch(url, {
+  const res = await request(url, {
     method,
-    headers: {
-      'Content-type': 'application/json'
-    },
-    body
+    data: body
   });
-  if (res.ok) {
+  if (res.status === 200) {
     dialogVisible.value = false;
     getConnections();
     ElMessage.success(`${action}成功`);

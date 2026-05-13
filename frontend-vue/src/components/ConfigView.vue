@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
+import request from '@/utils/request';
 
 interface Config {
   apiKey?: string;
@@ -42,9 +43,9 @@ const saving = ref(false);
 const loadConfig = async () => {
   loading.value = true;
   try {
-    const response = await fetch('/api/config');
-    if (response.ok) {
-      const data = await response.json();
+    const response = await request('/api/config');
+    if (response.status === 200) {
+      const data = response.data;
       config.value = data;
     }
   } catch (error) {
@@ -57,9 +58,9 @@ const loadConfig = async () => {
 
 const loadTools = async () => {
   try {
-    const response = await fetch('/api/config/tools');
-    if (response.ok) {
-      const data = await response.json();
+    const response = await request('/api/config/tools');
+    if (response.status === 200) {
+      const data = response.data;
       tools.value = data.tools || [];
     }
   } catch (error) {
@@ -70,12 +71,11 @@ const loadTools = async () => {
 const saveConfig = async () => {
   saving.value = true;
   try {
-    const response = await fetch('/api/config', {
+    const response = await request('/api/config', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config.value)
+      data: config.value
     });
-    if (response.ok) {
+    if (response.status === 200) {
       ElMessage.success('配置已保存');
     } else {
       ElMessage.error('保存失败');
@@ -87,19 +87,6 @@ const saveConfig = async () => {
     saving.value = false;
   }
 };
-
-// const applyConfig = async () => {
-//   try {
-//     const response = await fetch('/api/config/apply', { method: 'POST' });
-//     if (response.ok) {
-//       ElMessage.success('配置已应用');
-//     } else {
-//       ElMessage.error('应用失败');
-//     }
-//   } catch (error) {
-//     ElMessage.error('应用配置失败');
-//   }
-// };
 
 onMounted(() => {
   loadConfig();
