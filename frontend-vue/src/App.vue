@@ -11,14 +11,23 @@ import {
   Stopwatch
 } from '@element-plus/icons-vue';
 import Sidebar from './components/Sidebar.vue';
+import LoginDialog from "./components/LoginDialog.vue";
 import { useRoute } from 'vue-router';
+import { nextTick, ref } from 'vue';
 
+const isAppAlive = ref(true);
 const route = useRoute();
 const APIHref = `${location.protocol}//${location.hostname}:30001/swagger-ui.html?token=CyberStrikeAI`;
+
+const refresh = async () => {
+  isAppAlive.value = false;
+  await nextTick();
+  isAppAlive.value = true;
+};
 </script>
 
 <template>
-  <div class="app-layout">
+  <div v-if="isAppAlive" class="app-layout">
     <!-- Primary Navigation Rail -->
     <nav class="nav-rail">
       <div class="nav-logo">
@@ -166,6 +175,7 @@ const APIHref = `${location.protocol}//${location.hostname}:30001/swagger-ui.htm
         </div>
       </main>
     </div>
+    <login-dialog @refreshApp="refresh" />
   </div>
 </template>
 

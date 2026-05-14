@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import { ElMessage } from "element-plus";
 import UserStore from "../store/User";
 import { nextTick } from "vue";
@@ -20,15 +20,15 @@ request.interceptors.request.use((req) => {
   return req;
 });
 
-request.interceptors.response.use((res) => {
-  if (res.status === 401) {
+request.interceptors.response.use(null, (error: AxiosError) => {
+  if (error.status === 401) {
     userStore?.$patch({
       loginDialogVisible: true
     });
   }
-  return res;
-}, (err) => {
-  ElMessage.error(err.message);
+  // @ts-expect-error
+  const errMsg = error.response?.data?.error || error.message;
+  ElMessage.error(errMsg);
 });
 
 // const sendRequest = async (config: AxiosRequestConfig, onSuccess: Function, onError: Function) => {
