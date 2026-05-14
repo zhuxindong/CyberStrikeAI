@@ -2,6 +2,7 @@ package com.cyberstrike.tool;
 
 import com.cyberstrike.entity.McpServer;
 import com.cyberstrike.mcp.McpExecutor;
+import com.cyberstrike.repository.ConfigRepository;
 import com.cyberstrike.repository.McpServerRepository;
 import com.cyberstrike.service.KnowledgeService;
 import com.cyberstrike.service.PythonVenvService;
@@ -49,16 +50,21 @@ public class ToolRegistry {
     private final McpServerRepository mcpServerRepository;
     private final com.cyberstrike.skills.SkillsManager skillsManager;
     private final SkillsStatsService skillsStatsService;
+    private SubAgentManager subAgentManager;
+    private ConfigRepository configRepository;
 
     @Value("${cyberstrike.upload.path:./chat_uploads}")
     private String uploadBasePath;
 
     public ToolRegistry(YamlToolLoader yamlToolLoader,
                         KnowledgeService knowledgeService,
-                        WebshellService webshellService, PythonVenvService pythonVenvService,
+                        WebshellService webshellService,
+                        PythonVenvService pythonVenvService,
                         McpServerRepository mcpServerRepository,
                         SkillsManager skillsManager,
-                        SkillsStatsService skillsStatsService) {
+                        SkillsStatsService skillsStatsService,
+                        SubAgentManager subAgentManager,
+                        ConfigRepository configRepository) {
         this.yamlToolLoader = yamlToolLoader;
         this.knowledgeService = knowledgeService;
         this.webshellService = webshellService;
@@ -66,10 +72,16 @@ public class ToolRegistry {
         this.mcpServerRepository = mcpServerRepository;
         this.skillsManager = skillsManager;
         this.skillsStatsService = skillsStatsService;
+        this.subAgentManager = subAgentManager;
+        this.configRepository = configRepository;
         registerBuiltinTools();
-        // 注册Skills工具
         registerSkillsTools();
-        // 统计知识库工具数量
+
+        // 注册 Task 工具
+        if (subAgentManager != null) {
+            registerTaskTool(subAgentManager);
+        }
+
         long knowledgeToolsCount = builtinTools.values().stream()
                 .filter(t -> "Knowledge".equals(t.toolType()))
                 .count();
@@ -503,10 +515,6 @@ public class ToolRegistry {
     /**
      * 注册 WebShell 工具 - 用于远程命令执行和文件操作
      */
-
-    /**
-     * 注册 WebShell 工具 - 用于远程命令执行和文件操作
-     */
     private void registerWebShellTools() {
         if (webshellService == null) {
             log.warn("WebshellService 未注入，跳过注册 WebShell 工具");
@@ -809,6 +817,87 @@ public class ToolRegistry {
             return String.format("执行命令异常: %s", e.getMessage());
         }
     }
+
+    /**
+     * 注册 Task 工具（多 Agent 委派）
+     */
+    public void registerTaskTool(SubAgentManager subAgentManager) {
+        if (subAgentManager == null) {
+            log.warn("SubAgentManager 未注入，跳过注册 Task 工具");
+            return;
+        }
+
+        List<String> availableSubAgents = subAgentManager.getAvailableSubAgentTypes();
+
+        // 构建 subagent_type 的枚举值
+        StringBuilder enumValues = new StringBuilder();
+        for (String type : availableSubAgents) {
+            enumValues.append("\"").append(type).append("\", ");
+        }
+        String enumStr = enumValues.length() > 0 ? enumValues.substring(0, enumValues.length() - 2) : "";
+
+        String parametersJson = String.format("""
+        {
+            "type": "object",
+            "properties": {
+                "subagent_type": {
+                    "type": "string",
+                    "description": "子代理类型，指定要委派的子代理",
+                    "enum": [%s]
+                },
+                "description": {
+                    "type": "string",
+                    "description": "委派给子代理的任务描述，必须包含完整的目标、范围和期望输出"
+                }
+            },
+            "required": ["subagent_type", "description"]
+        }
+        """, enumStr);
+
+        registerBuiltinTool("task",
+                "将任务委派给专门的子代理执行。子代理会根据其专业领域处理任务并返回结果。" +
+                        "可用子代理类型: " + String.join(", ", availableSubAgents),
+                parametersJson,
+                (args) -> {
+                    String subagentType = args.has("subagent_type") ? args.get("subagent_type").asText() : null;
+                    String description = args.has("description") ? args.get("description").asText() : null;
+
+                    if (subagentType == null || subagentType.isEmpty()) {
+                        return "错误：缺少 subagent_type 参数";
+                    }
+
+                    if (description == null || description.isEmpty()) {
+                        return "错误：缺少 description 参数";
+                    }
+
+                    log.info("Task工具调用: subagent_type={}, description={}", subagentType, description);
+
+                    SubAgent subAgent = subAgentManager.getSubAgent(subagentType);
+                    if (subAgent == null) {
+                        return "错误：未找到子代理 '" + subagentType + "'。可用的子代理类型：" +
+                                String.join(", ", subAgentManager.getAvailableSubAgentTypes());
+                    }
+
+                    // 获取当前模型名称
+                    String model = getCurrentModel();
+                    String result = subAgent.execute(description, model);
+
+                    return result;
+                },
+                "MultiAgent");
+    }
+
+    /**
+     * 获取当前模型名称（需要从配置中获取）
+     */
+    private String getCurrentModel() {
+        // 从 configRepository 获取
+//        return configRepository.findById(1L)
+//                .map(Config::getModel)
+//                .orElse("gpt-4");
+        return null;
+    }
+
     /**
      * 获取所有工具定义（合并内置和 YAML(已启用)）
      */

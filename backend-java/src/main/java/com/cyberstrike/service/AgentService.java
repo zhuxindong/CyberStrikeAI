@@ -1,16 +1,14 @@
 package com.cyberstrike.service;
 
 import com.cyberstrike.dto.ChatRequest;
-import com.cyberstrike.entity.ChatCompletionMessageDO;
-import com.cyberstrike.entity.Config;
-import com.cyberstrike.entity.Conversation;
-import com.cyberstrike.entity.Message;
+import com.cyberstrike.entity.*;
 import com.cyberstrike.repository.ChatCompletionMessageRepository;
 import com.cyberstrike.repository.ConfigRepository;
 import com.cyberstrike.repository.ConversationRepository;
 import com.cyberstrike.repository.MessageRepository;
 import com.cyberstrike.service.openai.OpenAiService;
 import com.cyberstrike.service.openai.model.OpenAIModels.*;
+import com.cyberstrike.tool.SubAgentManager;
 import com.cyberstrike.tool.ToolContext;
 import com.cyberstrike.tool.ToolRegistry;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -55,6 +53,7 @@ public class AgentService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ConfigRepository configRepository;
     private final AgentFileService agentFileService;  // 改为 AgentFileService
+    private final SubAgentManager subAgentManager;
 
     // 任务管理
     private final Map<String, TaskInfo> runningTasks = new ConcurrentHashMap<>();
@@ -67,7 +66,7 @@ public class AgentService {
                         ChatCompletionMessageRepository chatCompletionMessageRepository,
                         ToolRegistry toolRegistry,
                         ConfigRepository configRepository,
-                        AgentFileService agentFileService) {  // 改为 AgentFileService
+                        AgentFileService agentFileService, SubAgentManager subAgentManager) {  // 改为 AgentFileService
         this.openAiService = openAiService;
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
@@ -75,6 +74,7 @@ public class AgentService {
         this.toolRegistry = toolRegistry;
         this.configRepository = configRepository;
         this.agentFileService = agentFileService;
+        this.subAgentManager = subAgentManager;
     }
 
 
@@ -109,6 +109,32 @@ public class AgentService {
             log.warn("获取迭代次数配置时发生异常，使用默认值 50", e);
             return 50;
         }
+    }
+
+    // ==================== 根据角色名称判断模式 ====================
+
+    /**
+     * 根据角色名称判断是否为多 Agent 模式
+     */
+    private boolean isMultiAgentModeByRole(String roleName) {
+        if (roleName == null) return false;
+        return "协调主代理".equals(roleName) ||
+                "Plan-Execute 规划主代理".equals(roleName) ||
+                "Supervisor 监督主代理".equals(roleName);
+    }
+
+    /**
+     * 根据角色名称获取主代理文件名
+     */
+    private String getOrchestratorFilenameByRole(String roleName) {
+        if (roleName == null) return "orchestrator.md";
+        if ("Plan-Execute 规划主代理".equals(roleName)) {
+            return "orchestrator-plan-execute.md";
+        }
+        if ("Supervisor 监督主代理".equals(roleName)) {
+            return "orchestrator-supervisor.md";
+        }
+        return "orchestrator.md";
     }
 
     /**
@@ -197,13 +223,28 @@ public class AgentService {
      * 优先使用主代理（orchestrator.md）的提示词，否则使用子代理
      */
     private String buildSystemPrompt(String roleName) {
+        // 多 Agent 主代理模式（新增）
+        if (isMultiAgentModeByRole(roleName)) {
+            String filename = getOrchestratorFilenameByRole(roleName);
+            try {
+                AgentMetadata agent = agentFileService.getAgent(filename);
+                if (agent != null && agent.getInstruction() != null &&
+                        !agent.getInstruction().trim().isEmpty()) {
+                    log.info("使用多 Agent 主代理提示词: {} (角色: {})", filename, roleName);
+                    return agent.getInstruction();
+                }
+            } catch (Exception e) {
+                log.debug("未找到主代理文件: {}", filename);
+            }
+        }
+
+        // 原有代码保持不变...
         try {
             if (agentFileService != null) {
-                // 如果指定了角色名称，尝试获取对应角色的提示词
                 if (roleName != null && !roleName.trim().isEmpty()) {
                     try {
                         String filename = roleName + ".md";
-                        com.cyberstrike.entity.AgentMetadata agent = agentFileService.getAgent(filename);
+                        AgentMetadata agent = agentFileService.getAgent(filename);
                         if (agent != null && agent.getInstruction() != null && !agent.getInstruction().trim().isEmpty()) {
                             log.info("使用角色提示词: {}", filename);
                             return agent.getInstruction();
@@ -213,9 +254,8 @@ public class AgentService {
                     }
                 }
 
-                // 尝试获取主代理（orchestrator.md）
                 try {
-                    com.cyberstrike.entity.AgentMetadata orchestrator = agentFileService.getAgent("orchestrator.md");
+                    AgentMetadata orchestrator = agentFileService.getAgent("orchestrator.md");
                     if (orchestrator != null && orchestrator.getInstruction() != null && !orchestrator.getInstruction().trim().isEmpty()) {
                         log.info("使用主代理提示词: orchestrator.md");
                         return orchestrator.getInstruction();
@@ -228,8 +268,34 @@ public class AgentService {
             log.warn("从 agents 目录获取系统提示词失败，使用默认提示词", e);
         }
 
-        // 后备默认提示词
         return getDefaultSystemPrompt();
+    }
+
+    private List<Tool> buildTools(String roleName) {
+        List<Tool> tools = new ArrayList<>();
+        boolean isMultiAgent = isMultiAgentModeByRole(roleName);
+
+        for (ToolRegistry.ToolDefinition def : toolRegistry.getToolsAll()) {
+            // task 工具只在多 Agent 模式下添加
+            if ("task".equals(def.name()) && !isMultiAgent) {
+                continue;
+            }
+
+            Map<String, Object> parameters;
+            try {
+                parameters = objectMapper.convertValue(def.parameters(),
+                        new TypeReference<Map<String, Object>>() {});
+            } catch (Exception e) {
+                parameters = new HashMap<>();
+                parameters.put("type", "object");
+                parameters.put("properties", new HashMap<>());
+            }
+
+            tools.add(new Tool("function", new Function(def.name(), def.description(), parameters)));
+        }
+
+        log.info("构建工具列表: 角色={}, 多Agent模式={}, 工具数量={}", roleName, isMultiAgent, tools.size());
+        return tools;
     }
 
     /**
@@ -418,11 +484,13 @@ public class AgentService {
                         String.format("{\"taskId\": \"%s\", \"conversationId\": \"%s\"}", taskId, conversationId));
 
                 // Prepare Tools
-                List<Tool> tools = new ArrayList<>();
-                for (ToolRegistry.ToolDefinition def : toolRegistry.getToolsAll()) {
-                    var function = new Function(def.name(), def.description(), def.parameters());
-                    tools.add(new Tool("function", function));
-                }
+//                List<Tool> tools = new ArrayList<>();
+//                for (ToolRegistry.ToolDefinition def : toolRegistry.getToolsAll()) {
+//                    var function = new Function(def.name(), def.description(), def.parameters());
+//                    tools.add(new Tool("function", function));
+//                }
+                // 4. 构建工具列表（根据角色自动判断是否包含 task）
+                List<Tool> tools = buildTools(request.getRole());
 
                 int maxIterations = getMaxIterations();
                 String finalResponse = "";

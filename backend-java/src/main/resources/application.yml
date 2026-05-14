@@ -47,6 +47,13 @@ app:
   swagger:
     token: "CyberStrikeAI"  # 配置你的静态 token
     token-header: X-Auth-Token      # 自定义 header 名称（可选，默认为 X-Auth-Token）
+  cyberstrike:
+    auth:
+      username: admin
+      password: admin
+    jwt:
+      secret: cyberstrike-secret-key-2024-256-bit-long-secret-key-for-jwt
+      expiration: 86400000  # 24小时，单位毫秒
 
 security:
   tools-dir: ./tools

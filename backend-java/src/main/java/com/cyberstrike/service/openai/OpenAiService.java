@@ -93,11 +93,16 @@ public class OpenAiService {
     // --- 3. 业务方法：直接使用单例的 restClient ---
     public OpenAIModels.ChatCompletionResponse chatCompletion(OpenAIModels.ChatCompletionRequest request) {
         ObjectMapper objectMapper = new ObjectMapper();
+
+        Map<String, Object> requestMap = objectMapper.convertValue(request, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+
+        // 添加禁用思考模式的参数
+        requestMap.put("thinking", Map.of("type", "disabled"));
         // 先获取 JSON 字符串
         String s = restClient.post()
                 .uri("/chat/completions")
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                .body(request)
+                .body(requestMap)
                 .retrieve()
                 .body(String.class);
 

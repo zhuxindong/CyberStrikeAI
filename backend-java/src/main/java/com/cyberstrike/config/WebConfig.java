@@ -1,19 +1,26 @@
 package com.cyberstrike.config;
 
-import com.cyberstrike.interceptor.SwaggerInterceptor;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.cyberstrike.interceptor.AuthInterceptor;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
+@RequiredArgsConstructor
 public class WebConfig implements WebMvcConfigurer {
 
-    @Autowired
-    private SwaggerInterceptor swaggerInterceptor;
+    private final AuthInterceptor authInterceptor;
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(swaggerInterceptor);
+        registry.addInterceptor(authInterceptor)
+                .addPathPatterns("/api/**")
+                .excludePathPatterns(
+                        "/api/auth/login",
+                        "/swagger-ui/**",
+                        "/v3/api-docs/**",
+                        "/actuator/health"
+                );
     }
 }
