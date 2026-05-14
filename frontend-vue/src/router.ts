@@ -49,7 +49,7 @@ const router = createRouter({
     {
       name: '角色管理',
       path: '/role',
-      component: () => import('./components/RolesView.vue')
+      component: () => import('./components/Role/RolesView.vue')
     },
     {
       name: '漏洞管理',
