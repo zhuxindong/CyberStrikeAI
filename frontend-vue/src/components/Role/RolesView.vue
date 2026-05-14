@@ -118,7 +118,7 @@ onMounted(fetchRoles);
             {{ role.enabled ? '已启用' : '已禁用' }}
           </span>
         </div>
-        <div class="role-card-description">{{ role.userPrompt }}</div>
+        <div class="role-card-description">{{ role.description }}</div>
         <div class="role-card-tools">
           <span class="role-card-tools-label">工具：</span>
           <span class="role-card-tools-value">{{ role.toolText }}</span>
@@ -173,6 +173,12 @@ onMounted(fetchRoles);
     gap: 12px;
     transition: all 0.2s;
     cursor: default;
+
+    &:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      border-color: var(--accent-color);
+      transform: translateY(-2px);
+    }
 
     .role-card-header {
       display: flex;

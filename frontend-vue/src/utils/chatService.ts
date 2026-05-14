@@ -1,6 +1,8 @@
 import { Attachment } from "@/components/ChatWindow.vue";
 import { escapeHtml } from "./escape";
+import UserStore from "@/store/User";
 
+const userStore = UserStore();
 export interface StreamCallbacks {
   onMessage: (id: string, content: string, type: string, extraData?: any) => void;
   onCancel: () => void;
@@ -72,6 +74,7 @@ export async function streamChat(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "Authorization": `Bearer ${userStore.token}`,
     },
     body: JSON.stringify({
       message,

@@ -220,6 +220,9 @@ const getToolList = async (reset: boolean = false) => {
     tools.value = res.data.tools;
     let total_enabled = 0, page_enabled = 0, page_total = Math.min(20, tools.value.length);
     for (const key in toolModifyCache.value) {
+      if (!key.includes(toolKeyword.value)) {
+        continue;
+      }
       const enabled = toolModifyCache.value[key];
       if (enabled) {
         total_enabled++;
