@@ -45,7 +45,7 @@ const fetchRoles = async () => {
     if (res.status === 200) {
       const data = res.data;
       roles.value = data.roles.map((role: Role) => {
-        role.isDefault = role.id === 13;
+        role.isDefault = role.id === 1;
         role.tools = role.tools || [];
         if (role.tools.length >= 5) {
           role.toolText = `${role.tools.slice(0, 5).join(',')}等工具`;

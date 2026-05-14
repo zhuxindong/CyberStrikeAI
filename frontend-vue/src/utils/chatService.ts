@@ -10,7 +10,7 @@ export interface StreamCallbacks {
   onDone: () => void;
 }
 
-interface SteamParams {
+interface StreamParams {
   message: string;
   conversationId?: string;
   role?: string;
@@ -66,7 +66,7 @@ export const getTitleByType = (type: string, params: any, content?: string) => {
 
 // 流式输出
 export async function streamChat(
-  params: SteamParams,
+  params: StreamParams,
   callbacks: StreamCallbacks,
 ) {
   const { message, conversationId, role, webshellConnectionId, attachments } = params;

@@ -16,7 +16,7 @@
       <el-form-item label="启用此角色" prop="enabled">
         <el-switch v-model="roleData.enabled" />
       </el-form-item>
-      <el-form-item v-if="roleData.id !== 13" label="关联的工具（可选）">
+      <el-form-item v-if="roleData.id !== 1" label="关联的工具（可选）">
         <div class="controls">
           <div class="actions">
             <el-button @click="toggleSelectAll('tool', true)">全选</el-button>
