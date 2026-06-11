@@ -13,11 +13,18 @@ import {
 import Sidebar from './components/Sidebar.vue';
 import LoginDialog from "./components/LoginDialog.vue";
 import { useRoute } from 'vue-router';
-import { nextTick, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
+import UserStore from "./store/User.ts";
+import { storeToRefs } from 'pinia';
+
+const userStore = UserStore();
+const { token } = storeToRefs(userStore);
 
 const isAppAlive = ref(true);
 const route = useRoute();
-const APIHref = `${location.protocol}//${location.hostname}:30001/swagger-ui.html?token=CyberStrikeAI`;
+const APIHref = computed(() => {
+  return `${location.protocol}//${location.hostname}:30001/swagger-ui.html?token=${token.value}`;
+});
 
 const refresh = async () => {
   isAppAlive.value = false;
@@ -159,7 +166,7 @@ const refresh = async () => {
         <div class="header-left">
           <h2>{{ route.name !== 'CyberStrikeAI' ? route.name : '' }}</h2>
         </div>
-        <div>
+        <div v-if="token">
           <el-link :href="APIHref" target="_blank" underline="never">
             <el-button>API文档</el-button>
           </el-link>
