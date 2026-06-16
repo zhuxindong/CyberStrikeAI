@@ -82,6 +82,8 @@ public class OpenAiService {
                 .baseUrl(baseUrl)
                 .defaultHeader("Authorization", "Bearer " + apiKey)
                 .defaultHeader("Content-Type", "application/json")
+                .defaultHeader("token", apiKey)
+                .defaultHeader("userid", "001531227")
                 .messageConverters(converters -> {
                     //converters.clear();
                     converters.add(new org.springframework.http.converter.json.MappingJackson2HttpMessageConverter(objectMapper));
@@ -93,7 +95,7 @@ public class OpenAiService {
     // --- 3. 业务方法：直接使用单例的 restClient ---
     public OpenAIModels.ChatCompletionResponse chatCompletion(OpenAIModels.ChatCompletionRequest request) {
         ObjectMapper objectMapper = new ObjectMapper();
-
+        //request.setModel(null);
         Map<String, Object> requestMap = objectMapper.convertValue(request, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
 
         // 添加禁用思考模式的参数
