@@ -1,7 +1,23 @@
 import { defineStore } from "pinia";
 
+export interface HitlSetting {
+  expanded: boolean;
+  mode: string;
+  sensitiveTools: string;
+}
+
 export default defineStore('Chat', {
   state() {
+    let hitlSettings: HitlSetting = { expanded: false, mode: '', sensitiveTools: '' };
+    const stored = localStorage.getItem('hitlSetting');
+    if (stored) {
+      try {
+        hitlSettings = JSON.parse(stored);
+      }
+      catch (e) {
+        console.log(e);
+      }
+    }
     return {
       queueStatusMap: {
         pending: {
@@ -28,7 +44,18 @@ export default defineStore('Chat', {
           label: '失败',
           elType: 'danger'
         },
-      }
+      },
+      reasoningSettings: {
+        expanded: false,
+        mode: 'default',
+        effort: '-'
+      },
+      hitlSetting: hitlSettings
     };
+  },
+  actions: {
+    saveHitlSetting() {
+      localStorage.setItem('hitlSetting', JSON.stringify(this.hitlSetting));
+    }
   }
 });

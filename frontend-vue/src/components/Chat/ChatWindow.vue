@@ -1,19 +1,20 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, reactive, useTemplateRef } from 'vue';
-import { getTitleByType, streamChat, scrollToBottom } from '../utils/chatService';
-import { escapeHtml } from '../utils/escape';
+import { getTitleByType, streamChat, scrollToBottom } from '../../utils/chatService.ts';
+import { escapeHtml } from '../../utils/escape.ts';
 import MarkdownIt from 'markdown-it';
 import { dayjs, ElMessage, UploadRequestOptions, ClickOutside as vClickOutside } from 'element-plus';
 import { Loading, User, ArrowDown, Cpu, MagicStick, Box, Aim, ZoomIn, View, Cloudy, Check } from '@element-plus/icons-vue';
-import AttackChainView from './AttackChainView.vue';
-import McpCallDialog from "./McpCallDialog.vue";
-
+import AttackChainView from '../AttackChainView.vue';
+import McpCallDialog from "../McpCallDialog.vue";
 import { storeToRefs } from 'pinia';
 import ConversationStore from "@/store/Conversation";
 import ChatStore from "@/store/Chat";
 import { useRoute } from 'vue-router';
 import request from '@/utils/request';
-import { Tool } from './McpView.vue';
+import { Tool } from "../McpView.vue";
+import ApprovalItem from "../Hitl/ApprovalItem.vue";
+import StopDialog from "./StopDialog.vue";
 
 const md = new MarkdownIt();
 
@@ -28,6 +29,7 @@ export interface TimelineItem {
   content?: string;
   createdAt?: string;
   args?: string;
+  data?: any;
   resultStatus?: string;
 }
 
@@ -81,6 +83,9 @@ const attachments = ref<Attachment[]>([]);
 const showAttackChain = ref(false);
 const mcpCallDialogVisible = ref<boolean>(false);
 const mcpCallDetail = ref<unknown>({});
+
+const showStopDialog = ref(false);
+const stopTaskId = ref('');
   
 const inputRef = useTemplateRef('inputRef');
 
@@ -105,7 +110,9 @@ const getRoleIcon = (roleId?: string) => {
 };
 
 const rolePopoverVisible = ref(false);
+// const chatModePopoverVisible = ref(false);
 const roles = ref<any[]>([]);
+// const chatModes = ref<any[]>([]);
 const selectedRole = ref<any>(null);
 
 const selectRole = (role: any) => {
@@ -176,7 +183,8 @@ const loadConversationHistory = async (conversationId: string) => {
               }
               msg.title = getTitleByType(msg.type, msg);
               msg.createdAt = dayjs(msg.createdAt).format('YYYY-MM-DD HH:mm:ss');
-              msg.args = msg.dataJson ? JSON.stringify(JSON.parse(msg.dataJson).arguments, null, 2) : '';
+              msg.data = msg.dataJson ? JSON.parse(msg.dataJson) : {};
+              msg.args = JSON.stringify(msg.data.arguments, null, 2);
               item.timelineItems?.push(msg);
             });
             generateMCPCalls(item);
@@ -214,7 +222,7 @@ const loadActiveTasks = async () => {
     } else if (!activeTaskInterval) {
       activeTaskInterval = setInterval(() => {
         loadActiveTasks();
-      }, 3000);
+      }, 6000);
     }
   }
 };
@@ -347,16 +355,16 @@ const sendMessage = async () => {
 
   scroll();
   let streamingConversatinoId: string | undefined = currentConversationId.value;
-  // Initial assistant placeholder tracking
   streamChat(
     {
       message: userMsg,
       conversationId: currentConversationId.value,
       role: selectedRole.value.name,
-      attachments: attachments.value
+      attachments: attachments.value,
+      hitl: chatStore.hitlSetting
     },
     {
-      onMessage: (id, content, type, data) => {
+      onMessage: (id, message, type, data) => {
         // 流式输出的对话Id和当前对话Id不一致时，不会输出对话
         if (currentConversationId.value !== streamingConversatinoId) {
           loadActiveTasks();
@@ -366,7 +374,7 @@ const sendMessage = async () => {
         const lastMessage: Message = messages[messages.length - 1];
         lastMessage.expanded = true;
         lastMessage.timelineItems = lastMessage.timelineItems || [];
-        const title = getTitleByType(type, data, content);
+        const title = getTitleByType(type, data, message);
         const createdAt = dayjs(new Date()).format('YYYY-MM-DD HH:mm:ss');
         // 保存任务ID
         if (type === 'conversation') {
@@ -377,32 +385,33 @@ const sendMessage = async () => {
             loadActiveTasks();
             attachments.value = [];
           }
-        } else if (['iteration', 'thinking', 'tool_calls_detected', 'response'].includes(type)) {
+        } else if (['iteration', 'thinking', 'tool_calls_detected', 'response', 'hitl_interrupt', 'hitl_resumed'].includes(type)) {
           lastMessage.timelineItems.push({
             id,
             type,
             createdAt,
             title,
-            content
+            data,
+            content: message
           });
-        } else if (type === 'cancelled') {
+        } else if (['cancelled', 'force_stopped'].includes(type)) {
           lastMessage.timelineItems.push({
             id,
             type,
             createdAt,
             title,
-            content
+            content: message
           });
           progressTitle.value = '⛔ 任务已取消';
         } else if (type === 'progress') {
-          progressTitle.value = content;
+          progressTitle.value = message;
         } else if (type === 'tool_call') {
           lastMessage.timelineItems.push({
             id,
             type,
             createdAt,
             title,
-            content,
+            content: message,
             functionName: data.toolName,
             args: JSON.stringify(data.arguments, null, 2)
           });
@@ -412,7 +421,7 @@ const sendMessage = async () => {
             type,
             createdAt,
             title,
-            content,
+            content: message,
             resultStatus: data.resultStatus
           });
         } else if (type === 'error') {
@@ -421,77 +430,51 @@ const sendMessage = async () => {
             type,
             createdAt,
             title,
-            content
+            content: message
           });
           progressTitle.value = '❌ 执行失败';
         }
         scroll();
       },
       onCancel: () => {
-        stopLoadActiveTasks();
-        if (currentConversationId.value !== streamingConversatinoId) {
-          return;
-        }
-        const lastMessage: Message = messages[messages.length - 1];
-        const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
-        lastMessage.content = timelineItems[timelineItems.length - 1].content;
-        generateMCPCalls(lastMessage);
-        toggleTimeline(lastMessage);
-
-        loading.value = false;
-        currentTaskId.value = undefined;
+        onStreamFinished(streamingConversatinoId);
         progressTitle.value = '⛔ 任务已取消';
-        scroll();
       },
       onError: () => {
-        stopLoadActiveTasks();
-        if (currentConversationId.value !== streamingConversatinoId) {
-          return;
-        }
-        const lastMessage: Message = messages[messages.length - 1];
-        const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
-        lastMessage.content = timelineItems[timelineItems.length - 1]?.content;
-        loading.value = false;
+        onStreamFinished(streamingConversatinoId, true);
         progressTitle.value = '❌ 执行失败';
-        scroll();
       },
       onDone: () => {
-        stopLoadActiveTasks();
-        if (currentConversationId.value !== streamingConversatinoId) {
-          return;
-        }
-        const lastMessage: Message = messages[messages.length - 1];
-        const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
-        lastMessage.content = timelineItems[timelineItems.length - 1].content;
-        generateMCPCalls(lastMessage);
-        toggleTimeline(lastMessage);
-
-        loading.value = false;
-        currentTaskId.value = undefined;
+        onStreamFinished(streamingConversatinoId);
         progressTitle.value = '✅ 渗透测试完成';
-        scroll();
       }
     }
   );
 };
 
+const onStreamFinished = (streamingConversatinoId?: string, failed: boolean = false) => {
+    stopLoadActiveTasks();
+    if (currentConversationId.value !== streamingConversatinoId) {
+      return;
+    }
+    const lastMessage: Message = messages[messages.length - 1];
+    const timelineItems: TimelineItem[] = lastMessage.timelineItems || [];
+    lastMessage.content = timelineItems[timelineItems.length - 1].content;
+    if (!failed) {
+      generateMCPCalls(lastMessage);
+      toggleTimeline(lastMessage);
+    }
+    loading.value = false;
+    currentTaskId.value = undefined;
+    scroll();
+}
+
 // 停止任务
 const stopTask = async (taskId?: string) => {
   taskId = taskId || currentTaskId.value;
   if (!taskId) return;
-  try {
-    const res = await request('/api/agent-loop/cancel', {
-      method: 'POST',
-      data: { task_id: taskId }
-    });
-    if (res.status === 200) {
-      loadActiveTasks();
-    } else {
-      ElMessage.error('停止任务失败');
-    }
-  } catch (error) {
-    console.error('Failed to cancel task:', error);
-  }
+  showStopDialog.value = true;
+  stopTaskId.value = taskId || currentTaskId.value || '';
 };
 
 // 展开/收起调用序列
@@ -595,7 +578,7 @@ const renderMarkdown = (text: string | undefined) => {
             </div>
             <!-- 调用序列 -->
             <div v-show="msg.timelineItems?.length" :class="['progress-timeline', { 'expanded': msg.expanded }]">
-              <div v-for="({ id, createdAt, title, type, content, args }) in msg.timelineItems"
+              <div v-for="({ id, createdAt, title, type, content, args, data }) in msg.timelineItems"
                 :key="id"
                 :class="['timeline-item', `timeline-item-${type}`]">
                 <div class="timeline-item-header">
@@ -618,10 +601,13 @@ const renderMarkdown = (text: string | undefined) => {
                       执行ID: <code>{{ escapeHtml(id) }}</code>
                     </div>
                   </div>
+                  <div v-else-if="type === 'hitl_interrupt'">
+                    <approval-item :approval="data" />
+                  </div>
                   <span v-else-if="type === 'cancelled'">
                     {{ content || '任务已取消' }}
                   </span>
-                  <span v-else-if="type !== 'tool_calls_detected' && type !== 'progress'">{{ content }}</span>
+                  <span v-else>{{ content }}</span>
                 </div>
               </div>
             </div>
@@ -636,7 +622,7 @@ const renderMarkdown = (text: string | undefined) => {
 
     <div class="input-area">
       <!-- Role Selector -->
-      <div v-if="!loading">
+      <div class="selectors" v-if="!loading">
         <el-popover
           :visible="rolePopoverVisible"
           @update:visible="(val: boolean) => rolePopoverVisible = val"
@@ -683,6 +669,52 @@ const renderMarkdown = (text: string | undefined) => {
             </div>
           </div>
         </el-popover>
+        <!-- <el-popover
+          :visible="chatModePopoverVisible"
+          @update:visible="(val: boolean) => chatModePopoverVisible = val"
+          placement="top-start"
+          :width="320"
+          trigger="click"
+          popper-class="role-selector-popover"
+        >
+          <template #reference>
+            <span class="role-selector-btn" :title="selectedRole?.description || '选择角色'">
+              <el-icon class="role-icon" :size="16">
+                <component :is="getRoleIcon(selectedRole?.id)" />
+              </el-icon>
+              <span class="role-text">{{ selectedRole?.name || '默认' }}</span>
+              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </span>
+          </template>
+
+          <div class="role-list-container">
+            <div class="role-list-header">对话模式</div>
+            <div class="role-list">
+              <div 
+                v-for="mode in chatModes" 
+                :key="mode.id" 
+                class="role-item"
+                :class="{ active: selectedRole?.id === mode.id }"
+                @click="selectRole(mode)"
+              >
+                <div class="role-item-icon">
+                  <el-icon :size="20">
+                     <component :is="getRoleIcon(mode.id)" />
+                  </el-icon>
+                </div>
+                <div class="role-item-content">
+                  <div class="role-item-title">{{ mode.name }}</div>
+                  <div class="role-item-desc" :title="mode.userPrompt">
+                    {{ mode.userPrompt.substring(0, 30) }}...
+                  </div>
+                </div>
+                <div class="role-item-check" v-if="selectedRole?.id === mode.id">
+                  <el-icon><Check /></el-icon>
+                </div>
+              </div>
+            </div>
+          </div>
+        </el-popover> -->
       </div>
 
       <div class="input-box">
@@ -751,6 +783,7 @@ const renderMarkdown = (text: string | undefined) => {
     />
     <!-- 工具调用详情 -->
     <McpCallDialog v-model:dialogVisible="mcpCallDialogVisible" :detail="mcpCallDetail" />
+    <stop-dialog v-model:visible="showStopDialog" :task-id="stopTaskId" />
   </div>
 </template>
 
@@ -768,7 +801,6 @@ const renderMarkdown = (text: string | undefined) => {
 
 .active-tasks {
   position: absolute;
-  width: 100%;
   padding: 8px;
   z-index: 100;
 
@@ -1168,6 +1200,11 @@ const renderMarkdown = (text: string | undefined) => {
   display: flex;
   gap: 10px;
   align-items: flex-end;
+
+  .selectors {
+    display: flex;
+    gap: 4px;
+  }
 
   .input-box {
     position: relative;

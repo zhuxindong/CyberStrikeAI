@@ -1,6 +1,7 @@
-import { Attachment } from "@/components/ChatWindow.vue";
+import { Attachment } from "@/components/Chat/ChatWindow.vue";
 import { escapeHtml } from "./escape";
 import UserStore from "@/store/User";
+import { HitlSetting } from "@/store/Chat";
 
 const userStore = UserStore();
 export interface StreamCallbacks {
@@ -16,6 +17,7 @@ interface StreamParams {
   role?: string;
   webshellConnectionId?: string;
   attachments?: Attachment[];
+  hitl?: HitlSetting;
 }
 
 // 滚动到底部
@@ -40,10 +42,10 @@ export const scrollToBottom = (container: HTMLElement | null, target?: HTMLEleme
 };
 
 // 根据消息类型获取标题
-export const getTitleByType = (type: string, params: any, content?: string) => {
+export const getTitleByType = (type: string, params: any, message?: string) => {
   let title = '';
-  if (type === 'tool_calls_detected' || type === 'progress') {
-    title = content || params.content || '';
+  if (['tool_calls_detected', 'progress'].includes(type)) {
+    title = message || params.content || '';
   } else if (type === 'tool_call') {
     const toolName = params.mcpExecutionIds || params.toolName || '未知工具';
     title = `🔧 调用工具: ${escapeHtml(toolName)}`
@@ -54,12 +56,20 @@ export const getTitleByType = (type: string, params: any, content?: string) => {
     title = `${statusIcon} 工具 ${escapeHtml(resultToolName)} 执行${success ? '完成' : '失败'}`
   } else if (type === 'iteration') {
     title = `正在进行第${params.iteration}轮迭代`;
-  } else if (type === 'cancelled') {
+  } else if (['cancelled', 'force_stopped'].includes(type)) {
     title = '⛔ 任务已取消';
   } else if (type === 'thinking') {
     title = '🤔 AI思考';
   } else if (type === 'error') {
     title = '❌ 错误';
+  } else if (type === 'hitl_interrupt') {
+    title = '🧑‍⚖️ HITL';
+  } else if (type === 'hitl_resumed') {
+    title = '✅ HITL';
+  } else if (type === 'hitl_rejected') {
+    title = '⛔ HITL';
+  } else if (type === 'interrupt_continue') {
+    title = '⏸️ 用户中断并继续';
   }
   return title;
 };
@@ -69,7 +79,8 @@ export async function streamChat(
   params: StreamParams,
   callbacks: StreamCallbacks,
 ) {
-  const { message, conversationId, role, webshellConnectionId, attachments } = params;
+  const { message, conversationId, role, webshellConnectionId, attachments, hitl } = params;
+  const { mode, sensitiveTools } = hitl || {};
   const response = await fetch("/api/agent-loop/stream", {
     method: "POST",
     headers: {
@@ -81,7 +92,12 @@ export async function streamChat(
       conversationId,
       role,
       webshellConnectionId,
-      attachments
+      attachments,
+      hitl: {
+        enabled: mode && mode !== 'off',
+        mode,
+        sensitiveTools: sensitiveTools?.split(',')
+      }
     }),
   });
 
@@ -115,7 +131,7 @@ export async function streamChat(
             // Backend format: { type, message, data }
             // data is a JSON object itself or string
             callbacks.onMessage(event.id, event.message, event.type, event.data);
-            if (event.type === "done") {
+            if (["done", 'force_stopped'].includes(event.type)) {
               callbacks.onDone();
             } else if (event.type === 'cancelled') {
               callbacks.onCancel();

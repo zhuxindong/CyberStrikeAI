@@ -54,6 +54,12 @@ const refresh = async () => {
           </el-icon>
           <span class="nav-label">对话</span>
         </el-menu-item>
+        <el-menu-item index="/hitl">
+          <el-icon>
+            <Avatar />
+          </el-icon>
+          <span class="nav-label">人机协同</span>
+        </el-menu-item>
         <el-menu-item index="/task">
           <el-icon>
             <VideoPlay />

@@ -14,7 +14,12 @@ const router = createRouter({
     {
       name: 'CyberStrikeAI',
       path: '/chat',
-      component: () => import('./components/ChatWindow.vue')
+      component: () => import('./components/Chat/ChatWindow.vue')
+    },
+    {
+      name: '人机交互',
+      path: '/hitl',
+      component: () => import('./components/Hitl/Index.vue')
     },
     {
       name: '任务管理',
