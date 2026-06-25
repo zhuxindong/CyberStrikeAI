@@ -32,15 +32,39 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
 
         // Swagger HTML 页面需要 token 验证
-        if (path.equals("/swagger-ui.html") || path.equals("/swagger-ui/index.html")) {
-            String token = request.getParameter("token");
-            if (swaggerToken != null && !swaggerToken.isEmpty() && swaggerToken.equals(token)) {
-                return true;
+//        if (path.equals("/swagger-ui.html") || path.equals("/swagger-ui/index.html")) {
+//            String token = request.getParameter("token");
+//            if (swaggerToken != null && !swaggerToken.isEmpty() && swaggerToken.equals(token)) {
+//                return true;
+//            }
+//            response.setStatus(401);
+//            response.setContentType("application/json;charset=UTF-8");
+//            response.getWriter().write("{\"error\":\"Token required for Swagger access\"}");
+//            return false;
+//        }
+        // 拦截 Swagger 主页面，要求携带 token
+        if (path.equals("/swagger-ui.html") || path.equals("/swagger-ui/index.html") || path.equals("/swagger-ui/")) {
+            String token = null;
+
+            // 方式1：从 Authorization Header 获取
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                token = authHeader.substring(7);
             }
-            response.setStatus(401);
-            response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"error\":\"Token required for Swagger access\"}");
-            return false;
+
+            // 方式2：从 URL 参数获取（支持前端跳转）
+            if (token == null) {
+                token = request.getParameter("token");
+            }
+
+            // 验证 Token
+            if (token == null || !authService.validateToken(token)) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write("{\"error\":\"请先登录后再访问 Swagger 文档\"}");
+                return false;
+            }
+            return true;
         }
 
         // ========== API 认证 ==========

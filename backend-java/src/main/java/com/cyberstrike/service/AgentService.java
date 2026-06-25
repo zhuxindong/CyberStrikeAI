@@ -1,6 +1,7 @@
 package com.cyberstrike.service;
 
 import com.cyberstrike.dto.ChatRequest;
+import com.cyberstrike.dto.HITLRequest;
 import com.cyberstrike.entity.*;
 import com.cyberstrike.repository.ChatCompletionMessageRepository;
 import com.cyberstrike.repository.ConfigRepository;
@@ -33,6 +34,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.TimeoutException;
 
 @Service
 public class AgentService {
@@ -54,6 +56,7 @@ public class AgentService {
     private final ConfigRepository configRepository;
     private final AgentFileService agentFileService;  // 改为 AgentFileService
     private final SubAgentManager subAgentManager;
+    private final HITLService hitlService;
 
     // 任务管理
     private final Map<String, TaskInfo> runningTasks = new ConcurrentHashMap<>();
@@ -66,7 +69,9 @@ public class AgentService {
                         ChatCompletionMessageRepository chatCompletionMessageRepository,
                         ToolRegistry toolRegistry,
                         ConfigRepository configRepository,
-                        AgentFileService agentFileService, SubAgentManager subAgentManager) {  // 改为 AgentFileService
+                        AgentFileService agentFileService,
+                        SubAgentManager subAgentManager,
+                        HITLService hitlService) {  // 改为 AgentFileService
         this.openAiService = openAiService;
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
@@ -75,6 +80,7 @@ public class AgentService {
         this.configRepository = configRepository;
         this.agentFileService = agentFileService;
         this.subAgentManager = subAgentManager;
+        this.hitlService = hitlService;
     }
 
 
@@ -385,6 +391,11 @@ public class AgentService {
         }
         conversationRepository.save(conversation);
 
+        // 激活 HITL 人机协同配置
+        if (hitlService != null && request.getHitl() != null) {
+            hitlService.activateConversation(conversationId, request.getHitl());
+        }
+
         task.status = "running";
         task.message = request.getMessage().length() > 50
                 ? request.getMessage().substring(0, 50) + "..."
@@ -610,6 +621,49 @@ public class AgentService {
                             String toolType = "MCP";
 
                             try {
+                                // HITL 人机协同检查
+                                if (hitlService != null && hitlService.needsToolApproval(conversationId, rawFunctionName)) {
+                                    String assistantMessageId = mId;
+                                    HITLService.HITLRuntimeConfig hitlConfig = hitlService.getRuntimeConfig(conversationId);
+                                    HITLService.HITLDecision hitlDecision = waitHITLApproval(
+                                            conversationId, assistantMessageId, rawFunctionName, callId, arguments, emitter, task
+                                    );
+                                    if (hitlDecision == null) {
+                                        // 任务被取消
+                                        return;
+                                    }
+                                    if ("reject".equalsIgnoreCase(hitlDecision.getDecision())) {
+                                        // 人工拒绝，将反馈加入上下文让模型继续迭代
+                                        String rejectMsg = "工具调用 " + rawFunctionName + " 被人机协同审批拒绝。反馈: " + hitlDecision.getComment();
+                                        result = rejectMsg;
+                                        resultStatus = "rejected";
+                                        messages.add(ChatCompletionMessage.builder()
+                                                .role("tool")
+                                                .toolCallId(callId)
+                                                .name(rawFunctionName)
+                                                .content(result)
+                                                .build());
+                                        messageDOList.add(ChatCompletionMessageDO.builder()
+                                                .role("tool")
+                                                .toolCallId(callId)
+                                                .name(rawFunctionName)
+                                                .content(result)
+                                                .conversationId(conversationId)
+                                                .createTime(new Date())
+                                                .build());
+                                        continue;
+                                    }
+                                    // 审批通过，检查是否有编辑后的参数（仅 review_edit 模式允许）
+                                    if (hitlConfig != null && "review_edit".equalsIgnoreCase(hitlConfig.getMode()) &&
+                                        hitlDecision.getEditedArguments() != null && !hitlDecision.getEditedArguments().isEmpty()) {
+                                        try {
+                                            arguments = objectMapper.writeValueAsString(hitlDecision.getEditedArguments());
+                                        } catch (JsonProcessingException e) {
+                                            log.warn("Failed to serialize edited arguments", e);
+                                        }
+                                    }
+                                }
+
                                 ToolRegistry.ToolDefinition toolDefinition = toolRegistry.getToolsAll().stream()
                                         .filter(def -> def.name().equalsIgnoreCase(rawFunctionName))
                                         .findFirst()
@@ -759,6 +813,84 @@ public class AgentService {
         });
 
         return emitter;
+    }
+
+    /**
+     * HITL 等待人工审批
+     * 对应 Go 版本的 waitHITLApproval
+     */
+    private HITLService.HITLDecision waitHITLApproval(String conversationId, String assistantMessageId,
+                                                       String toolName, String toolCallId, String arguments,
+                                                       SseEmitter emitter, TaskInfo task) throws InterruptedException, IOException {
+        if (hitlService == null) {
+            return null;
+        }
+
+        // 发送 HITL 中断事件
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("toolName", toolName);
+        payload.put("arguments", arguments);
+        payload.put("toolCallId", toolCallId);
+        payload.put("source", "java_agent_loop");
+
+        HITLService.HITLRuntimeConfig config = hitlService.getRuntimeConfig(conversationId);
+        if (config == null || !config.isEnabled()) {
+            return null;
+        }
+
+        HITLService.PendingInterrupt pending = hitlService.createPendingInterrupt(
+                conversationId, assistantMessageId, config.getMode(), toolName, toolCallId, payload
+        );
+
+        // 发送 SSE 事件通知前端
+        // 修改调用处
+        Map<String, Object> eventData = Map.of(
+                "conversationId", conversationId,
+                "interruptId", pending.getInterruptId(),
+                "mode", config.getMode(),
+                "toolName", toolName,
+                "toolCallId", toolCallId,
+                "payload", payload
+        );
+
+        String eventDataJson = objectMapper.writeValueAsString(eventData);
+        sendSseEvent(emitter, "hitl_interrupt", assistantMessageId, "命中人机协同审批", eventDataJson);
+
+        try {
+            HITLService.HITLDecision decision = hitlService.waitDecision(pending.getInterruptId(), config.getTimeout());
+
+            if ("reject".equalsIgnoreCase(decision.getDecision())) {
+                String rejectData = objectMapper.writeValueAsString(Map.of(
+                        "conversationId", conversationId,
+                        "interruptId", pending.getInterruptId(),
+                        "toolName", toolName,
+                        "comment", decision.getComment()
+                ));
+                sendSseEvent(emitter, "hitl_rejected", assistantMessageId, "人工拒绝本次工具调用，模型将基于反馈继续迭代", rejectData);
+            } else {
+                String resumeData = objectMapper.writeValueAsString(Map.of(
+                        "conversationId", conversationId,
+                        "interruptId", pending.getInterruptId(),
+                        "toolName", toolName,
+                        "comment", decision.getComment(),
+                        "editedArgs", decision.getEditedArguments()
+                ));
+                sendSseEvent(emitter, "hitl_resumed", assistantMessageId, "人工确认通过，继续执行", resumeData);
+            }
+            return decision;
+        } catch (TimeoutException e) {
+            // 超时：自动批准（普通模式）
+            hitlService.cancelDecision(pending.getInterruptId());
+            sendSseEvent(emitter, "hitl_timeout", assistantMessageId, "审批超时，自动批准", null);
+            return new HITLService.HITLDecision("approve", "timeout auto approve", Collections.emptyMap());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            hitlService.cancelDecision(pending.getInterruptId());
+            if (task != null) {
+                task.cancelled = true;
+            }
+            return null;
+        }
     }
 
     private boolean isContinueCommand(String message) {
