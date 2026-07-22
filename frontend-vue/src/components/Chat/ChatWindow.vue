@@ -110,16 +110,41 @@ const getRoleIcon = (roleId?: string) => {
 };
 
 const rolePopoverVisible = ref(false);
-// const chatModePopoverVisible = ref(false);
 const roles = ref<any[]>([]);
-// const chatModes = ref<any[]>([]);
 const selectedRole = ref<any>(null);
+// const chatModePopoverVisible = ref(false);
+// const chatModes = ref<any[]>([
+//   {
+//     name: 'Eino 单代理（ADK）',
+//     intro: 'Eino ChatModelAgent + Runner，MCP 工具（/api/eino-agent）',
+//     icon: '⚡'
+//   },
+//   {
+//     name: 'Deep（DeepAgent）',
+//     intro: 'Eino DeepAgent，task 调度子代理',
+//     icon: '🧩'
+//   },
+//   {
+//     name: 'Plan-Execute',
+//     intro: '规划 → 执行 → 重规划（单执行器带工具）',
+//     icon: '📋'
+//   },
+//   {
+//     name: 'Supervisor',
+//     intro: '监督者协调，transfer 委派子代理',
+//     icon: '🎯'
+//   },
+// ]);
+// const selectedMode = ref<any>(null);
 
 const selectRole = (role: any) => {
   selectedRole.value = role;
   rolePopoverVisible.value = false;
 };
-
+// const selectChatMode = (mode: any) => {
+//   selectedMode.value = mode;
+//   chatModePopoverVisible.value = false;
+// }
 const fetchRoles = async () => {
   const res = await request('/api/roles');
   if (res.status === 200) {
@@ -629,40 +654,40 @@ const renderMarkdown = (text: string | undefined) => {
           placement="top-start"
           :width="320"
           trigger="click"
-          popper-class="role-selector-popover"
+          popper-class="option-selector-popover"
         >
           <template #reference>
-            <span class="role-selector-btn" :title="selectedRole?.description || '选择角色'">
-              <el-icon class="role-icon" :size="16">
+            <span class="option-selector-btn" :title="selectedRole?.description || '选择角色'">
+              <el-icon class="option-icon" :size="16">
                 <component :is="getRoleIcon(selectedRole?.id)" />
               </el-icon>
-              <span class="role-text">{{ selectedRole?.name || '默认' }}</span>
+              <span class="option-text">{{ selectedRole?.name || '默认' }}</span>
               <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </span>
           </template>
 
-          <div class="role-list-container">
-            <div class="role-list-header">选择角色</div>
-            <div class="role-list">
+          <div class="option-list-container">
+            <div class="option-list-header">选择角色</div>
+            <div class="option-list">
               <div 
                 v-for="role in roles" 
                 :key="role.id" 
-                class="role-item"
+                class="option-item"
                 :class="{ active: selectedRole?.id === role.id }"
                 @click="selectRole(role)"
               >
-                <div class="role-item-icon">
+                <div class="option-item-icon">
                   <el-icon :size="20">
                      <component :is="getRoleIcon(role.id)" />
                   </el-icon>
                 </div>
-                <div class="role-item-content">
-                  <div class="role-item-title">{{ role.name }}</div>
-                  <div class="role-item-desc" :title="role.userPrompt">
+                <div class="option-item-content">
+                  <div class="option-item-title">{{ role.name }}</div>
+                  <div class="option-item-desc" :title="role.userPrompt">
                     {{ role.userPrompt.substring(0, 30) }}...
                   </div>
                 </div>
-                <div class="role-item-check" v-if="selectedRole?.id === role.id">
+                <div class="option-item-check" v-if="selectedRole?.id === role.id">
                   <el-icon><Check /></el-icon>
                 </div>
               </div>
@@ -670,45 +695,40 @@ const renderMarkdown = (text: string | undefined) => {
           </div>
         </el-popover>
         <!-- <el-popover
-          :visible="chatModePopoverVisible"
-          @update:visible="(val: boolean) => chatModePopoverVisible = val"
+          v-model:visible="chatModePopoverVisible"
           placement="top-start"
           :width="320"
           trigger="click"
-          popper-class="role-selector-popover"
+          popper-class="option-selector-popover"
         >
           <template #reference>
-            <span class="role-selector-btn" :title="selectedRole?.description || '选择角色'">
-              <el-icon class="role-icon" :size="16">
-                <component :is="getRoleIcon(selectedRole?.id)" />
-              </el-icon>
-              <span class="role-text">{{ selectedRole?.name || '默认' }}</span>
+            <span class="option-selector-btn" :title="selectedMode?.description || '选择模式'">
+              <span>{{ selectedMode?.icon }}</span>
+              <span class="option-text">{{ selectedMode?.name || '默认' }}</span>
               <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </span>
           </template>
 
-          <div class="role-list-container">
-            <div class="role-list-header">对话模式</div>
-            <div class="role-list">
+          <div class="option-list-container">
+            <div class="option-list-header">对话模式</div>
+            <div class="option-list">
               <div 
-                v-for="mode in chatModes" 
-                :key="mode.id" 
-                class="role-item"
-                :class="{ active: selectedRole?.id === mode.id }"
-                @click="selectRole(mode)"
+                v-for="mode in chatModes"
+                :key="mode.name" 
+                class="option-item"
+                :class="{ active: selectedMode?.name === mode.name }"
+                @click="selectChatMode(mode)"
               >
-                <div class="role-item-icon">
-                  <el-icon :size="20">
-                     <component :is="getRoleIcon(mode.id)" />
-                  </el-icon>
+                <div class="option-item-icon">
+                  {{ mode.icon }}
                 </div>
-                <div class="role-item-content">
-                  <div class="role-item-title">{{ mode.name }}</div>
-                  <div class="role-item-desc" :title="mode.userPrompt">
-                    {{ mode.userPrompt.substring(0, 30) }}...
+                <div class="option-item-content">
+                  <div class="option-item-title">{{ mode.name }}</div>
+                  <div class="option-item-desc" :title="mode.intro">
+                    {{ mode.intro.substring(0, 30) }}...
                   </div>
                 </div>
-                <div class="role-item-check" v-if="selectedRole?.id === mode.id">
+                <div class="option-item-check" v-if="selectedRole?.name === mode.name">
                   <el-icon><Check /></el-icon>
                 </div>
               </div>
@@ -1374,7 +1394,7 @@ const renderMarkdown = (text: string | undefined) => {
   }
 }
 
-.role-selector-btn {
+.option-selector-btn {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1390,18 +1410,18 @@ const renderMarkdown = (text: string | undefined) => {
   box-sizing: border-box;
 }
 
-.role-selector-btn:hover {
+.option-selector-btn:hover {
   background-color: var(--el-fill-color-light);
   border-color: var(--el-color-primary-light-5);
   color: var(--el-color-primary);
 }
 
-.role-icon {
+.option-icon {
   font-size: 16px;
   color: var(--el-color-primary);
 }
 
-.role-text {
+.option-text {
   max-width: 100px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1419,19 +1439,19 @@ const renderMarkdown = (text: string | undefined) => {
 
 <style>
 /* Global styles for popover content */
-.role-selector-popover {
+.option-selector-popover {
   padding: 0 !important;
   border-radius: 12px !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
 }
 
-.role-list-container {
+.option-list-container {
   display: flex;
   flex-direction: column;
   max-height: 400px;
 }
 
-.role-list-header {
+.option-list-header {
   padding: 12px 16px;
   font-weight: 600;
   font-size: 14px;
@@ -1439,12 +1459,12 @@ const renderMarkdown = (text: string | undefined) => {
   color: var(--el-text-color-primary);
 }
 
-.role-list {
+.option-list {
   padding: 8px;
   overflow-y: auto;
 }
 
-.role-item {
+.option-item {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1456,16 +1476,16 @@ const renderMarkdown = (text: string | undefined) => {
   margin-bottom: 4px;
 }
 
-.role-item:hover {
+.option-item:hover {
   background-color: var(--el-fill-color-light);
 }
 
-.role-item.active {
+.option-item.active {
   background-color: var(--el-color-primary-light-9);
   border-color: var(--el-color-primary-light-5);
 }
 
-.role-item-icon {
+.option-item-icon {
   width: 32px;
   height: 32px;
   display: flex;
@@ -1476,24 +1496,24 @@ const renderMarkdown = (text: string | undefined) => {
   color: #606266;
 }
 
-.role-item.active .role-item-icon {
-  background-color: var(--el-color-primary);
+.option-item.active .option-item-icon {
+  background-color: hsl(216 100% 91% / 1);
   color: white;
 }
 
-.role-item-content {
+.option-item-content {
   flex: 1;
   min-width: 0;
 }
 
-.role-item-title {
+.option-item-title {
   font-weight: 600;
   font-size: 14px;
   color: var(--el-text-color-primary);
   margin-bottom: 2px;
 }
 
-.role-item-desc {
+.option-item-desc {
   font-size: 12px;
   color: var(--el-text-color-secondary);
   white-space: nowrap;
@@ -1501,7 +1521,7 @@ const renderMarkdown = (text: string | undefined) => {
   text-overflow: ellipsis;
 }
 
-.role-item-check {
+.option-item-check {
   color: var(--el-color-primary);
 }
 </style>

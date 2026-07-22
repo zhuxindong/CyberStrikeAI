@@ -8,7 +8,7 @@
       <el-empty v-else description="暂无待审批项" />
     </div>
     <el-pagination hide-on-single-page layout="->, prev, pager, next" v-model:current-page="pageNum"
-      :page-size="pageSize" :total="total" />
+      :page-size="pageSize" :total="total" @change="getPendingList(false)" />
   </div>
 </template>
 
@@ -40,10 +40,13 @@ const total = ref(0);
 const pendingList = ref<Approval[]>([]);
 
 onMounted(() => {
-  getPendingList();
+  getPendingList(true);
 });
 
-const getPendingList = async () => {
+const getPendingList = async (reset: boolean = false) => {
+  if (reset) {
+    pageNum.value = 1;
+  }
   const res = await request({
     url: '/api/hitl/pending',
     method: 'get',
